@@ -1,19 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'pages/login_page.dart';
 import 'database/tables/event_tabel.dart';
 import 'models/event_model.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString('auth_token');
+
+  runApp(MyApp(isLoggedIn: token != null));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final bool isLoggedIn;
+
+  const MyApp({super.key, required this.isLoggedIn});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'SQLite Demo',
-      home: EventPage(),
+      debugShowCheckedModeBanner: false,
+      title: 'SeArah Demo',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: isLoggedIn ? EventPage() : const LoginPage(),
     );
   }
 }
@@ -54,10 +64,32 @@ class _EventPageState extends State<EventPage> {
     _loadEvents();
   }
 
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('auth_token');
+
+    // Balik ke login page
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Daftar Event')),
+      appBar: AppBar(
+        title: const Text('Daftar Event'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _logout,
+          ),
+        ],
+      ),
       body: ListView.builder(
         itemCount: events.length,
         itemBuilder: (context, index) {
@@ -71,7 +103,7 @@ class _EventPageState extends State<EventPage> {
       floatingActionButton: FloatingActionButton(
         onPressed: _addEvent,
         child: const Icon(Icons.add),
-     ),
-);
-}
+      ),
+    );
+  }
 }
