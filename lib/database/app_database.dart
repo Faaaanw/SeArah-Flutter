@@ -9,7 +9,7 @@ class AppDatabase {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('searah.db');
+    _database = await _initDB('searah');
     return _database!;
   }
 

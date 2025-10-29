@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  static const String baseUrl = "http://127.0.0.1:8000/api"; // ganti sesuai IP kamu
+  static const String baseUrl = "http://192.168.2.131:8000/api"; // Ganti dengan IP lokal kamu
 
+  // 🔐 LOGIN
   static Future<Map<String, dynamic>> login(String email, String password) async {
     final response = await http.post(
       Uri.parse('$baseUrl/login'),
@@ -19,7 +19,9 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> register(String name, String email, String password) async {
+  // 🧾 REGISTER
+  static Future<Map<String, dynamic>> register(
+      String name, String email, String password) async {
     final response = await http.post(
       Uri.parse('$baseUrl/register'),
       headers: {'Content-Type': 'application/json'},
@@ -30,6 +32,50 @@ class ApiService {
       return jsonDecode(response.body);
     } else {
       throw Exception('Registrasi gagal: ${response.body}');
+    }
+  }
+
+  // 🚪 LOGOUT
+  static Future<void> logout(String token) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/logout'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Logout gagal: ${response.body}');
+    }
+  }
+
+  // 👥 Ambil daftar teman
+  static Future<List<dynamic>> getFriends(int userId, String token) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/friends/list/$userId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    } else {
+      throw Exception('Gagal mengambil daftar teman: ${res.body}');
+    }
+  }
+
+  // 📍 Ambil lokasi teman
+  static Future<List<dynamic>> getFriendLocations(
+      int userId, String token) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/friend-locations/$userId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    } else {
+      throw Exception('Gagal mengambil lokasi teman: ${res.body}');
     }
   }
 }

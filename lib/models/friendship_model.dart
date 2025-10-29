@@ -3,18 +3,18 @@ class Friendship {
   final int userId;
   final int friendId;
   final String status; // pending, accepted, rejected, blocked
-  final String shareType; // location, event, none
-  final String createdAt;
-  final String updatedAt;
+  final String? shareType; // location, event, none (nullable supaya aman)
+  final String? createdAt;
+  final String? updatedAt;
 
   Friendship({
     this.id,
     required this.userId,
     required this.friendId,
     required this.status,
-    required this.shareType,
-    required this.createdAt,
-    required this.updatedAt,
+    this.shareType,
+    this.createdAt,
+    this.updatedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -31,10 +31,10 @@ class Friendship {
 
   factory Friendship.fromMap(Map<String, dynamic> map) {
     return Friendship(
-      id: map['id'],
-      userId: map['user_id'],
-      friendId: map['friend_id'],
-      status: map['status'],
+      id: map['id'] is int ? map['id'] : int.tryParse(map['id'].toString()),
+      userId: map['user_id'] is int ? map['user_id'] : int.tryParse(map['user_id'].toString()) ?? 0,
+      friendId: map['friend_id'] is int ? map['friend_id'] : int.tryParse(map['friend_id'].toString()) ?? 0,
+      status: map['status'] ?? 'pending',
       shareType: map['share_type'],
       createdAt: map['created_at'],
       updatedAt: map['updated_at'],
