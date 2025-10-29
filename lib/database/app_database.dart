@@ -1,6 +1,14 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
+// Import tabel modular
+// import 'tables/user_tabel.dart';
+import 'tables/friendship_tabel.dart';
+import 'tables/user_locations_tabel.dart';
+import 'tables/event_tabel.dart';
+import 'tables/event_participant_tabel.dart';
+import 'tables/smartzone_tabel.dart';
+
 class AppDatabase {
   static final AppDatabase instance = AppDatabase._init();
   static Database? _database;
@@ -16,55 +24,16 @@ class AppDatabase {
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
-
-    // Buat database dan tabel
     return await openDatabase(path, version: 1, onCreate: _createDB);
   }
 
-  Future _createDB(Database db, int version) async {
-    // Buat tabel events
-    await db.execute('''
-      CREATE TABLE events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        creator_id INTEGER,
-        title TEXT,
-        description TEXT,
-        location_name TEXT,
-        location_latitude REAL,
-        location_longitude REAL,
-        start_time TEXT,
-        created_at TEXT,
-        updated_at TEXT
-      )
-    ''');
-
-    // Buat tabel event_participants
-    await db.execute('''
-      CREATE TABLE event_participants (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        event_id INTEGER,
-        user_id INTEGER,
-        rsvp_status TEXT,
-        is_organizer INTEGER,
-        created_at TEXT,
-        updated_at TEXT
-      )
-    ''');
-
-    // Buat tabel smart_zones
-    await db.execute('''
-      CREATE TABLE smart_zones (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        name TEXT,
-        center_latitude REAL,
-        center_longitude REAL,
-        radius_m INTEGER,
-        associated_event_id INTEGER,
-        created_at TEXT,
-        updated_at TEXT
-      )
-    ''');
+  Future<void> _createDB(Database db, int version) async {
+    // await UserTable().createTable(db);
+    await FriendshipTable().createTable(db);
+    await UserLocationTable().createTable(db);
+    await EventTable().createTable(db);
+    await EventParticipantTable().createTable(db);
+    await SmartZoneTable().createTable(db);
   }
 
   Future close() async {
