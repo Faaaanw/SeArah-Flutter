@@ -23,7 +23,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'SeArah Demo',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: isLoggedIn ? EventPage() : const LoginPage(),
+      home: isLoggedIn ? EventPage() : const LoginPageWidget(),
     );
   }
 }
@@ -72,7 +72,7 @@ class _EventPageState extends State<EventPage> {
     if (mounted) {
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const LoginPage()),
+        MaterialPageRoute(builder: (_) => const LoginPageWidget()),
         (route) => false,
       );
     }

@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static const String baseUrl = "http://192.168.2.131:8000/api"; // Ganti dengan IP lokal kamu
-
-  // 🔐 LOGIN
+  // Ganti dengan IP lokal kamu
+ static const String baseUrl = "http://localhost:8000/api";
+  // 🔐 LOGIN MANUAL
   static Future<Map<String, dynamic>> login(String email, String password) async {
     final response = await http.post(
       Uri.parse('$baseUrl/login'),
@@ -18,6 +18,23 @@ class ApiService {
       throw Exception('Login gagal: ${response.body}');
     }
   }
+
+  // 🌐 LOGIN/REGISTER DENGAN GOOGLE (BARU DITAMBAHKAN)
+  static Future<Map<String, dynamic>> googleLogin(String token, {bool useAccessToken = false}) async {
+  final body = useAccessToken
+      ? {'access_token': token}
+      : {'id_token': token};
+
+  final response = await http.post(
+    Uri.parse('http://localhost:8000/api/google-login'),
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode(body),
+  );
+
+  return jsonDecode(response.body);
+}
+
+
 
   // 🧾 REGISTER
   static Future<Map<String, dynamic>> register(
