@@ -1,11 +1,8 @@
-// File: lib/models/friend_model.dart
-
 class Friend {
   final int id;
   final String name;
   final String email;
-  final bool isSharingLocation;
-  // Tambahkan lokasi
+  bool isSharingLocation;
   double? latitude;
   double? longitude;
 
@@ -13,7 +10,7 @@ class Friend {
     required this.id,
     required this.name,
     required this.email,
-    required this.isSharingLocation,
+    this.isSharingLocation = false,
     this.latitude,
     this.longitude,
   });
@@ -21,14 +18,16 @@ class Friend {
   factory Friend.fromJson(Map<String, dynamic> json) {
     return Friend(
       id: json['id'],
-      name: json['name'],
-      email: json['email'],
-      isSharingLocation: json['is_sharing_location'] ?? false,
+      name: json['name'] ?? '',
+      email: json['email'] ?? '',
+      // konversi 0/1 ke bool
+      isSharingLocation: json['is_sharing_location'] == 1,
+      latitude: json['latitude']?.toDouble(),
+      longitude: json['longitude']?.toDouble(),
     );
   }
 
-  // Metode untuk menambahkan lokasi
-  void updateLocation(double lat, double lng) {
+  void updateLocation(double? lat, double? lng) {
     latitude = lat;
     longitude = lng;
   }

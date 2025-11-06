@@ -7,22 +7,29 @@ class SyncService {
   static Future<void> syncData(int userId, String token) async {
     final db = await AppDatabase.instance.database;
 
-    // Sinkronisasi friendships
-    final friendsJson = await ApiService.getFriends(userId, token);
+    // ================================
+    // 👥 Sinkronisasi daftar teman
+    // Sekarang getFriends() tidak perlu userId
+    // ================================
+    final friendsJson = await ApiService.getFriends(token);
     await db.delete('friendships');
+
     for (var f in friendsJson) {
       await db.insert('friendships', {
-        'id': f['id'],
-        'user_id': userId,
-        'friend_id': f['id'],
+        'user_id': userId, // id pengguna saat ini
+        'friend_id': f['id'], // id teman dari response API
         'status': 'accepted',
         'share_type': f['share_type'] ?? 'none',
       });
     }
 
-    // Sinkronisasi lokasi teman
+    // ================================
+    // 📍 Sinkronisasi lokasi teman
+    // getFriendLocations masih pakai userId (sesuai route /location/friends/{user_id})
+    // ================================
     final locationsJson = await ApiService.getFriendLocations(userId, token);
     await db.delete('user_locations');
+
     for (var l in locationsJson) {
       final loc = UserLocation.fromJson(l);
       await db.insert('user_locations', {
@@ -31,5 +38,7 @@ class SyncService {
         'longitude': loc.longitude,
       });
     }
+
+    print('✅ Sinkronisasi data teman & lokasi selesai.');
   }
 }

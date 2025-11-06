@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:searah_backend/pages/dashboard_page.dart';
+import 'package:searah_backend/viewmodel/home_viewmodel.dart';
 import '../services/api_services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:searah_backend/main.dart'; // supaya bisa akses navigatorKey
 
 // ====== Konstanta Warna ======
 const Color _kPeachIconColor = Color(0xFFBFA4A0);
@@ -37,32 +40,61 @@ class LoginViewModel extends ChangeNotifier {
       final password = passwordController.text.trim();
 
       if (email.isEmpty || password.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Email dan password tidak boleh kosong')),
-        );
+        // ... (SnackBar error handling)
         _isLoading = false;
         notifyListeners();
         return;
       }
 
       final result = await ApiService.login(email, password);
+      print("Response Login: $result");
 
-      _isLoading = false;
-      notifyListeners();
+      final bool isSuccess = result['success'] == true ||
+          result['status'] == true ||
+          result['token'] != null; // Cek token juga
 
-      if (context.mounted) {
-        Navigator.pushReplacementNamed(context, '/dashboard');
+      if (isSuccess) {
+        final token = result['token'];
+        final userId = result['user']?['id'];
+
+        if (token == null || userId == null) {
+          throw Exception('Token atau userId tidak ditemukan dalam response.');
+        }
+
+        // 1. Ambil HomeViewModel dari tree
+        final vm = context.read<HomeViewModel>();
+        vm.setUserSession(userId: userId, token: token);
+
+        // 2. Muat data awal (penting agar HomeViewModel siap)
+        await vm.loadInitialData();
+
+        // 3. NAVIGASI TO THE POINT MENGGUNAKAN GLOBAL KEY
+        // Ini adalah cara paling andal untuk navigasi setelah operasi async
+        final navigator = navigatorKey.currentState;
+
+        if (navigator != null) {
+          print("✅ Navigating to HomePageWidget using GlobalKey...");
+          navigator.pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomePageWidget()),
+          );
+        } else if (context.mounted) {
+          // Fallback, jika GlobalKey gagal
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomePageWidget()),
+          );
+        }
+      } else {
+        // ... (Handle login gagal jika respons 200 tapi isSuccess false)
       }
     } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Login gagal: $e')),
         );
       }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 

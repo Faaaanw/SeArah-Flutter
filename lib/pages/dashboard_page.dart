@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:searah_backend/pages/create_group_page.dart';
 import '../viewmodel/home_viewmodel.dart';
 import '../models/friend_model.dart';
-
 
 // Definisi Konstanta Warna (Sama dengan di LoginPage)
 const Color _kPrimaryButtonColor = Color(0xFFFA8B60);
@@ -16,10 +16,8 @@ class HomePageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => HomeViewModel()..loadInitialData(),
-      child: const _HomeView(),
-    );
+    // Pakai instance HomeViewModel yang sudah disediakan di main.dart
+    return const _HomeView();
   }
 }
 
@@ -29,6 +27,20 @@ class _HomeView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<HomeViewModel>();
+
+    // Mendefinisikan konten untuk panel bawah
+    Widget bottomPanelContent;
+    if (vm.isLoading) {
+      bottomPanelContent = const Center(child: CircularProgressIndicator());
+    } else if (!vm.hasGroups) {
+      // KONDISI BARU: Tidak punya grup sama sekali
+      bottomPanelContent = const _CreateGroupPanel();
+    } else if (vm.hasFriends) {
+      // Ada Grup (tapi mungkin belum memuat atau tidak ada teman)
+      bottomPanelContent = _FriendListPanel(friends: vm.friends); // Ada Teman
+    } else {
+      bottomPanelContent = const _ConnectNowPanel(); // Belum Ada Teman
+    }
 
     return Scaffold(
       body: Stack(
@@ -55,11 +67,8 @@ class _HomeView extends StatelessWidget {
                       color: Colors.black12, blurRadius: 10, spreadRadius: 5)
                 ],
               ),
-              child: vm.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : vm.hasFriends
-                      ? _FriendListPanel(friends: vm.friends) // Ada Teman
-                      : const _ConnectNowPanel(), // Belum Ada Teman
+              child:
+                  bottomPanelContent, // Menggunakan variabel yang didefinisikan di atas
             ),
           ),
         ],
@@ -72,8 +81,8 @@ class _HomeView extends StatelessWidget {
 
   Widget _buildMapLayer(BuildContext context, List<Friend> friends) {
     // Lokasi default (misalnya, di tengah Cianjur)
-    final initialCenter = LatLng(-6.8208, 107.1396); 
-    
+    final initialCenter = LatLng(-6.8208, 107.1396);
+
     // Filter dan buat markers untuk teman yang berbagi lokasi
     final markers = friends
         .where((f) => f.latitude != null && f.longitude != null)
@@ -91,10 +100,10 @@ class _HomeView extends StatelessWidget {
         point: initialCenter, // Ganti dengan lokasi user sendiri
         width: 60,
         height: 60,
-        child: const Icon(Icons.person_pin_circle, color: Colors.blue, size: 40),
+        child:
+            const Icon(Icons.person_pin_circle, color: Colors.blue, size: 40),
       ),
     );
-
 
     return FlutterMap(
       options: MapOptions(
@@ -138,7 +147,7 @@ class _HomeView extends StatelessWidget {
               ),
             ),
           ),
-          
+
           const SizedBox(height: 10),
 
           // Pengaturan Berbagi Lokasi & Group (TODO: Ganti dengan Group Dropdown)
@@ -158,8 +167,7 @@ class _HomeView extends StatelessWidget {
       showUnselectedLabels: false,
       currentIndex: 0,
       items: const [
-        BottomNavigationBarItem(
-            icon: Icon(Icons.map_outlined), label: 'Map'),
+        BottomNavigationBarItem(icon: Icon(Icons.map_outlined), label: 'Map'),
         BottomNavigationBarItem(
             icon: Icon(Icons.notifications_outlined), label: 'Notifications'),
         BottomNavigationBarItem(
@@ -173,7 +181,6 @@ class _HomeView extends StatelessWidget {
     );
   }
 }
-
 
 // --- 3. Widget State Teman ---
 
@@ -198,9 +205,9 @@ class _ConnectNowPanel extends StatelessWidget {
             width: 200,
             child: ElevatedButton(
               onPressed: () {
-                // TODO: Navigasi ke halaman Add Friend
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Go to Add Friend Page')),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CreateGroupPage()),
                 );
               },
               style: ElevatedButton.styleFrom(
@@ -239,11 +246,11 @@ class _FriendListPanel extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             ),
             alignment: Alignment.center,
-            child: const Text('Event Card Placeholder', 
+            child: const Text('Event Card Placeholder',
                 style: TextStyle(color: Colors.white, fontSize: 18)),
           ),
         ),
-        
+
         const Padding(
           padding: EdgeInsets.only(left: 20.0, top: 8.0, bottom: 8.0),
           child: Text(
@@ -251,7 +258,7 @@ class _FriendListPanel extends StatelessWidget {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ),
-        
+
         Expanded(
           child: ListView.builder(
             padding: EdgeInsets.zero,
@@ -263,6 +270,36 @@ class _FriendListPanel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// --- 3. Widget State: Belum ada grup ---
+class _CreateGroupPanel extends StatelessWidget {
+  const _CreateGroupPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(32.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: const [
+          Icon(Icons.group_add_outlined, color: _kPeachIconColor, size: 60),
+          SizedBox(height: 16),
+          Text(
+            "Anda belum bergabung dalam grup mana pun.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.black87, fontSize: 16),
+          ),
+          SizedBox(height: 8),
+          Text(
+            "Mulai berbagi lokasi dengan teman Anda dengan membuat grup baru melalui menu di kiri atas.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.black54, fontSize: 14),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -285,8 +322,7 @@ class _FriendListItem extends StatelessWidget {
       ),
       title: Text(friend.name,
           style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(
-          isOffline ? 'Location Disabled' : 'Online'),
+      subtitle: Text(isOffline ? 'Location Disabled' : 'Online'),
       trailing: isOffline
           ? const Icon(Icons.visibility_off, color: Colors.redAccent)
           : const Icon(Icons.location_on, color: Colors.green),
@@ -338,51 +374,65 @@ class _LocationSharingToggle extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // TODO: Group Filter Dropdown
+        // Dropdown Group (kiri)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(30),
-            boxShadow: const [
-              BoxShadow(color: Colors.black12, blurRadius: 8)
-            ],
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
           ),
           child: Row(
             children: [
               const Icon(Icons.group, color: _kPeachIconColor, size: 20),
               const SizedBox(width: 8),
-              // Placeholder Dropdown
               DropdownButton<String>(
-                value: 'All Friends', // Ganti dengan Group yang dipilih
-                items: const [
-                  DropdownMenuItem(value: 'All Friends', child: Text('All Friends')),
-                  DropdownMenuItem(value: 'Family', child: Text('Family')),
-                  DropdownMenuItem(value: 'Work', child: Text('Work')),
+                items: [
+                  DropdownMenuItem(
+                    value: 'Create New Group',
+                    child: Row(
+                      children: [
+                        Icon(Icons.add_circle_outline,
+                            size: 18, color: _kPrimaryButtonColor),
+                        SizedBox(width: 6),
+                        Text('Create New Group'),
+                      ],
+                    ),
+                  ),
                 ],
                 onChanged: (String? newValue) {
-                  // vm.filterByGroup(newValue!);
+                  if (newValue == 'Create New Group') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const CreateGroupPage()),
+                    );
+                  } else {
+                    // vm.filterByGroup(newValue!);
+                  }
                 },
-                underline: Container(), // Hapus garis bawah
               ),
             ],
           ),
         ),
 
-        // Toggle Status Berbagi Lokasi User
+        // Toggle Status Berbagi Lokasi User (kanan)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(30),
-            boxShadow: const [
-              BoxShadow(color: Colors.black12, blurRadius: 8)
-            ],
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
           ),
           child: Row(
             children: [
-              Text(vm.isUserSharingLocation ? 'Sharing' : 'Hidden', 
-                   style: TextStyle(fontSize: 14, color: vm.isUserSharingLocation ? Colors.green : Colors.red)),
+              Text(
+                vm.isUserSharingLocation ? 'Sharing' : 'Hidden',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: vm.isUserSharingLocation ? Colors.green : Colors.red,
+                ),
+              ),
               Switch(
                 value: vm.isUserSharingLocation,
                 onChanged: vm.toggleLocationSharing,
