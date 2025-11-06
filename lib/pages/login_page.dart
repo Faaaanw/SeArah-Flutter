@@ -38,7 +38,8 @@ class LoginViewModel extends ChangeNotifier {
 
       if (email.isEmpty || password.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Email dan password tidak boleh kosong')),
+          const SnackBar(
+              content: Text('Email dan password tidak boleh kosong')),
         );
         _isLoading = false;
         notifyListeners();
@@ -51,9 +52,7 @@ class LoginViewModel extends ChangeNotifier {
       notifyListeners();
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'] ?? 'Login berhasil')),
-        );
+        Navigator.pushReplacementNamed(context, '/dashboard');
       }
     } catch (e) {
       _isLoading = false;
@@ -157,13 +156,12 @@ class _LoginView extends StatelessWidget {
           child: Stack(
             children: [
               Positioned.fill(
-                child: Image.network(
-                  'https://images.unsplash.com/photo-1520975870407-35a62c5f6a9a?q=80&w=1200&auto=format&fit=crop',
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
-                      Container(color: Colors.grey.shade200),
-                ),
-              ),
+                  child: Image.network(
+                'https://upload.wikimedia.org/wikipedia/commons/2/2f/Google_2015_logo.svg',
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    Container(color: Colors.grey.shade200),
+              )),
               Align(
                 alignment: Alignment.bottomCenter,
                 child: Container(
@@ -306,7 +304,7 @@ class _LoginView extends StatelessWidget {
                                                 MainAxisAlignment.center,
                                             children: [
                                               Image.asset(
-                                                'assets/images/googlelogo.png',
+                                                '../assets/images/google.png',
                                                 height: 28,
                                                 width: 28,
                                               ),
