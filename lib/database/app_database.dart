@@ -23,33 +23,24 @@ class AppDatabase {
 
   Future _createDB(Database db, int version) async {
     // Buat tabel events
-    await db.execute('''
-      CREATE TABLE events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        creator_id INTEGER,
-        title TEXT,
-        description TEXT,
-        location_name TEXT,
-        location_latitude REAL,
-        location_longitude REAL,
-        start_time TEXT,
-        created_at TEXT,
-        updated_at TEXT
-      )
-    ''');
+   await db.execute('''
+    CREATE TABLE events (
+      id INTEGER PRIMARY KEY, // Hapus AUTOINCREMENT jika ID disinkronkan dari server
+      creator_id INTEGER NOT NULL,
+      group_id INTEGER NOT NULL, // ⬅️ DITAMBAH
+      title TEXT,
+      description TEXT,
+      location_name TEXT,
+      location_latitude REAL,
+      location_longitude REAL,
+      start_time TEXT,
+      created_at TEXT,
+      updated_at TEXT
+    )
+  ''');
 
     // Buat tabel event_participants
-    await db.execute('''
-      CREATE TABLE event_participants (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        event_id INTEGER,
-        user_id INTEGER,
-        rsvp_status TEXT,
-        is_organizer INTEGER,
-        created_at TEXT,
-        updated_at TEXT
-      )
-    ''');
+   
 
     // Buat tabel smart_zones
     await db.execute('''

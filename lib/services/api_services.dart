@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:searah_backend/models/event_model.dart';
+import 'package:searah_backend/models/group_model.dart';
 
 class ApiService {
   // ⚠️ Ganti dengan IP komputer kamu di jaringan lokal (bukan localhost)
   // Misal: http://192.168.2.140:8000/api
-  static const String baseUrl = "http://192.168.1.13:8000/api";
+  static const String baseUrl = "http://192.168.1.18:8000/api";
 
   // 🔐 LOGIN MANUAL
   static Future<Map<String, dynamic>> login(
@@ -52,6 +54,30 @@ class ApiService {
     }
   }
 
+  // 🔐 Ganti Password
+  static Future<void> changePassword({
+    required String token,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/change-password'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          jsonDecode(response.body)['message'] ?? 'Gagal mengganti password');
+    }
+  }
+
   // 🚪 LOGOUT
   static Future<void> logout(String token) async {
     final response = await http.post(
@@ -64,6 +90,20 @@ class ApiService {
 
     if (response.statusCode != 200) {
       throw Exception('Logout gagal: ${response.body}');
+    }
+  }
+
+  // 👤 Ambil profil user saat ini
+  static Future<Map<String, dynamic>> getCurrentUser(String token) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/user'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Gagal mengambil data user: ${response.body}');
     }
   }
 
@@ -123,24 +163,46 @@ class ApiService {
   }
 
   // 👥 Ambil daftar grup user
-  static Future<List<dynamic>> getUserGroups(String token) async {
+
+  // 🆕 Buat grup baru
+
+  // 📍 Ambil lokasi teman-teman
+  static Future<List<dynamic>> getFriendLocations(
+      int userId, String token) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/location/friends/$userId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    } else {
+      throw Exception('Gagal mengambil lokasi teman: ${res.body}');
+    }
+  }
+
+  static Future<List<Group>> getUserGroups(String token) async {
     final response = await http.get(
       Uri.parse('$baseUrl/groups'),
       headers: {'Authorization': 'Bearer $token'},
     );
+
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      List<dynamic> jsonList = jsonDecode(response.body);
+      // Mapping dari List<Map> ke List<Group>
+      return jsonList.map((json) => Group.fromJson(json)).toList();
     } else {
-      throw Exception('Gagal mengambil grup');
+      throw Exception('Gagal mengambil grup: ${response.body}');
     }
   }
 
   // 🆕 Buat grup baru
-  static Future<Map<String, dynamic>> createGroup({
+  // Menggunakan Model Group untuk return value
+  static Future<Group> createGroup({
     required String token,
     required String name,
     String? description,
-    required List<int> memberIds,
+    required List<int> memberIds, // ID teman yang akan diundang
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/groups'),
@@ -156,47 +218,91 @@ class ApiService {
     );
 
     if (response.statusCode == 201) {
-      return jsonDecode(response.body);
+      // API mengembalikan objek {'message': '...', 'group': {...}}
+      final Map<String, dynamic> data = jsonDecode(response.body);
+      return Group.fromJson(data['group']);
     } else {
       throw Exception('Gagal membuat grup: ${response.body}');
     }
   }
 
-  // 📍 Update lokasi user
-  static Future<void> updateLocation({
+  // ➕ Tambah Anggota ke Grup
+  static Future<void> addMemberToGroup({
     required String token,
-    required double latitude,
-    required double longitude,
+    required int groupId,
+    required int memberUserId, // ID pengguna yang akan ditambahkan
   }) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/location/update'),
+      // URL: /groups/{group}/members
+      Uri.parse('$baseUrl/groups/$groupId/members'),
       headers: {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
       body: jsonEncode({
-        'latitude': latitude,
-        'longitude': longitude,
+        'user_id': memberUserId,
       }),
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Gagal memperbarui lokasi: ${response.body}');
+      throw Exception('Gagal menambah anggota: ${response.body}');
+    }
+    // Jika berhasil (status 200), tidak ada data yang dikembalikan (void)
+  }
+
+  static Future<Event> createEvent({
+    required String token,
+    required int groupId,
+    required String title,
+    String? description,
+    String? locationName,
+    required double lat,
+    required double lng,
+    required DateTime startTime,
+  }) async {
+    final eventData = {
+      'title': title,
+      'description': description,
+      'location_name': locationName,
+      'location_latitude': lat,
+      'location_longitude': lng,
+      'start_time': startTime
+          .toIso8601String()
+          .substring(0, 19)
+          .replaceFirst('T', ' '), // Format Laravel: Y-m-d H:i:s
+    };
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/groups/$groupId/events'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json'
+      },
+      body: jsonEncode(eventData),
+    );
+
+    if (response.statusCode == 201) {
+      return Event.fromJson(jsonDecode(response.body)['event']);
+    } else {
+      // Tangani error validasi atau 403
+      throw Exception(
+          jsonDecode(response.body)['message'] ?? 'Gagal membuat event.');
     }
   }
 
-  // 📍 Ambil lokasi teman-teman
-  static Future<List<dynamic>> getFriendLocations(
-      int userId, String token) async {
-    final res = await http.get(
-      Uri.parse('$baseUrl/location/friends/$userId'),
+// 2. 🔍 Ambil Semua Event Grup dari Server
+  static Future<List<Event>> getGroupEvents(int groupId, String token) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/groups/$groupId/events'),
       headers: {'Authorization': 'Bearer $token'},
     );
 
-    if (res.statusCode == 200) {
-      return jsonDecode(res.body);
+    if (response.statusCode == 200) {
+      List<dynamic> jsonList = jsonDecode(response.body);
+      return jsonList.map((json) => Event.fromJson(json)).toList();
     } else {
-      throw Exception('Gagal mengambil lokasi teman: ${res.body}');
+      throw Exception(
+          'Gagal mengambil event grup: ${jsonDecode(response.body)['message'] ?? 'Error server.'}');
     }
   }
 }

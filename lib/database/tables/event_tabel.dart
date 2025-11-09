@@ -3,7 +3,7 @@ import '../app_database.dart';
 import '../../models/event_model.dart';
 
 class EventTable {
-  static const tableName='events';
+  static const tableName = 'events';
 
   Future<void> createTable(Database db) async {
     await db.execute('''
@@ -26,12 +26,27 @@ class EventTable {
 
   Future<int> insertEvent(Event event) async {
     final db = await dbHelper.database;
-    return await db.insert('events', event.toMap());
+    // Gunakan ConflictAlgorithm.replace jika ID dari server
+    return await db.insert(tableName, event.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<List<Event>> getAllEvents() async {
+  // Ambil semua event user dari database lokal berdasarkan Grup
+  Future<List<Event>> getEventsByGroup(int groupId) async {
     final db = await dbHelper.database;
-    final result = await db.query('events', orderBy: 'start_time DESC');
+    final result = await db.query(
+      tableName,
+      where: 'group_id = ?',
+      whereArgs: [groupId],
+      orderBy: 'start_time DESC',
+    );
+    return result.map((e) => Event.fromMap(e)).toList();
+  }
+
+  // Ambil semua event user (bisa digunakan untuk sinkronisasi)
+  Future<List<Event>> getAllLocalEvents() async {
+    final db = await dbHelper.database;
+    final result = await db.query(tableName, orderBy: 'start_time DESC');
     return result.map((e) => Event.fromMap(e)).toList();
   }
 

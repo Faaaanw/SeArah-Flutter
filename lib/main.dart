@@ -1,41 +1,72 @@
-// File: main.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:searah_backend/Navigation/navbar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'viewmodel/home_viewmodel.dart';
 import 'pages/login_page.dart';
-import 'pages/dashboard_page.dart';
-// import 'pages/create_group_page.dart'; // Tidak perlu di sini jika tidak digunakan sebagai rute utama
 
-// 👉 Tambahkan global key ini
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString('auth_token');
+  final userId = prefs.getInt('user_id');
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => HomeViewModel()),
       ],
-      child: const MyApp(),
+      child: MyApp(
+        isLoggedIn: token != null && userId != null,
+        token: token,
+        userId: userId,
+      ),
     ),
   );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MyApp extends StatefulWidget {
+  final bool isLoggedIn;
+  final String? token;
+  final int? userId;
+
+  const MyApp({
+    super.key,
+    required this.isLoggedIn,
+    this.token,
+    this.userId,
+  });
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    final vm = context.read<HomeViewModel>();
+
+    if (widget.isLoggedIn && widget.token != null && widget.userId != null) {
+      vm.setUserSession(userId: widget.userId!, token: widget.token!);
+
+      // ✅ panggil di sini, bukan di build()
+      vm.loadUserProfile();
+      vm.loadInitialData();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'SeArah',
-      navigatorKey: navigatorKey, // 👉 Selalu sediakan GlobalKey
-      home: const LoginPageWidget(), // Tetapkan halaman awal di sini
-      // ❌ Hapus routes di bawah ini jika tidak digunakan secara khusus
-      // routes: {
-      //   '/dashboard': (context) => const HomePageWidget(),
-      //   '/create-group': (context) => const CreateGroupPage(),
-      // },
+      navigatorKey: navigatorKey,
+      home: widget.isLoggedIn
+          ? const Navbar()
+          : const LoginPageWidget(),
     );
   }
 }

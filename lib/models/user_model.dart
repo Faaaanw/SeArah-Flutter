@@ -17,4 +17,6 @@ class User {
         email: json['email'],
         isSharingLocation: json['is_sharing_location'] == 1 || json['is_sharing_location'] == true,
       );
+      
+      
 }
