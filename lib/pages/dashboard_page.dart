@@ -137,8 +137,7 @@ class _HomeView extends StatelessWidget {
           ),
           Consumer<HomeViewModel>(
             builder: (context, vm, _) {
-              final friendMarkers = vm.friends
-                  .where((f) => f.latitude != null && f.longitude != null)
+              final friendMarkers = vm.friendsForMap
                   .map(
                     (f) => Marker(
                       point: LatLng(f.latitude!, f.longitude!),

@@ -41,6 +41,11 @@ class HomeViewModel extends ChangeNotifier {
 
   // ====== Getter ======
   List<Friend> get friends => _friends;
+  List<Friend> get friendsForMap => _friends
+      .where((f) =>
+          f.isSharingLocation && f.latitude != null && f.longitude != null)
+      .toList();
+
   List<Group> get groups => _groups;
   bool get isLoadingGroups => _isLoadingGroups;
   bool get isLoading => _isLoading;
@@ -116,15 +121,11 @@ class HomeViewModel extends ChangeNotifier {
       final friendsInGroup = await ApiService.getFriendsByGroup(
           groupId: groupId, token: _authToken!);
 
-      // Filter user sendiri
-      final friendsOnly =
-          friendsInGroup.where((f) => f.id != _currentUserId).toList();
-
       // Update cache _allFriends supaya pindah ke "All Groups" tetap ada
       _allFriends.removeWhere((f) => f.groupId == groupId);
-      _allFriends.addAll(friendsOnly);
+      _allFriends.addAll(friendsInGroup);
 
-      _friends = friendsOnly;
+      _friends = friendsInGroup;
       await fetchFriendLocations(_authToken!); // optional, ambil lokasi teman
     } catch (e) {
       debugPrint('Gagal mengambil teman per grup: $e');
@@ -150,6 +151,14 @@ class HomeViewModel extends ChangeNotifier {
 
   // ====== Load Semua Data Awal ======
   Future<void> loadInitialData() async {
+    await fetchFriendLocations(_authToken!);
+
+// Reset lokasi user jika sharing dimatikan
+    if (!_isUserSharingLocation) {
+      _userLocation = LatLng(0, 0);
+      safeNotifyListeners();
+    }
+
     if (_authToken == null || _currentUserId == null) {
       debugPrint('❌ Error: Token atau userId belum diatur.');
       return;
@@ -286,17 +295,22 @@ class HomeViewModel extends ChangeNotifier {
 
   // ❌ _updateLocationAndRefresh dihapus karena fungsinya diambil alih oleh Stream
 
-  // ====== Lokasi User ======
   void toggleLocationSharing(bool value) {
     _isUserSharingLocation = value;
-    safeNotifyListeners();
 
-    // kirim status baru ke server
-    _sendLocationToServer(
-      _userLocation.latitude,
-      _userLocation.longitude,
-      isSharing: value,
-    );
+    // Jika dimatikan, hapus lokasi user di server
+    if (!value) {
+      _userLocation = LatLng(0, 0); // atau bisa null, sesuaikan
+      _sendLocationToServer(0, 0, isSharing: false);
+    } else {
+      _sendLocationToServer(
+        _userLocation.latitude,
+        _userLocation.longitude,
+        isSharing: true,
+      );
+    }
+
+    safeNotifyListeners();
   }
 
   // (Fungsi-fungsi lain: fetchFriends, fetchFriendLocations, fetchGroups, addGroup, searchLocation, dll., tetap sama)
@@ -341,18 +355,49 @@ class HomeViewModel extends ChangeNotifier {
   void updateFriendLocationsOnMap() {
     if (_friendLocations.isEmpty || _friends.isEmpty) return;
 
-    // _friendLocations = [{'id': 1, 'latitude': -6.82, 'longitude': 107.14}, ...]
     for (var friend in _friends) {
       final loc = _friendLocations.firstWhere(
         (f) => f['id'] == friend.id,
         orElse: () => {},
       );
+
       if (loc.isNotEmpty) {
-        friend.latitude = (loc['latitude'] as num?)?.toDouble();
-        friend.longitude = (loc['longitude'] as num?)?.toDouble();
+        final isSharing = (loc['is_sharing'] ?? 1) == 1;
+        friend.isSharingLocation = isSharing;
+
+        if (isSharing) {
+          friend.latitude = (loc['latitude'] as num?)?.toDouble();
+          friend.longitude = (loc['longitude'] as num?)?.toDouble();
+        } else {
+          friend.latitude = null;
+          friend.longitude = null;
+        }
       }
     }
-    notifyListeners();
+
+    // 🔹 Filter _friends agar hanya tampil yang sharing
+    // Jangan hapus teman dari list _friends, cukup update lokasi & status sharing
+    for (var friend in _friends) {
+      final loc = _friendLocations.firstWhere(
+        (f) => f['id'] == friend.id,
+        orElse: () => {},
+      );
+
+      if (loc.isNotEmpty) {
+        final isSharing = (loc['is_sharing'] ?? 1) == 1;
+        friend.isSharingLocation = isSharing;
+
+        if (isSharing) {
+          friend.latitude = (loc['latitude'] as num?)?.toDouble();
+          friend.longitude = (loc['longitude'] as num?)?.toDouble();
+        } else {
+          friend.latitude = null;
+          friend.longitude = null;
+        }
+      }
+    }
+
+    safeNotifyListeners();
   }
 
   // ====== Fetch Friend Locations ======
@@ -361,7 +406,7 @@ class HomeViewModel extends ChangeNotifier {
     try {
       final res = await ApiService.getFriendLocations(_currentUserId!, token);
       _friendLocations = List<Map<String, dynamic>>.from(res);
-      updateFriendLocationsOnMap(); // ✅ Sinkronkan lokasi teman
+      updateFriendLocationsOnMap(); // ✅ sinkronisasi dan filter teman
       debugPrint(
           '✅ Lokasi teman berhasil diambil (${_friendLocations.length})');
     } catch (e) {
