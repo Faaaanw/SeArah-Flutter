@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:searah_backend/Navigation/navbar.dart';
 import 'package:searah_backend/pages/dashboard_page.dart';
+import 'package:searah_backend/pages/register_page.dart';
 import 'package:searah_backend/viewmodel/home_viewmodel.dart';
 import '../services/api_services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:searah_backend/main.dart'; // supaya bisa akses navigatorKey
@@ -55,7 +58,16 @@ class LoginViewModel extends ChangeNotifier {
 
       if (isSuccess) {
         final token = result['token'];
-        final userId = result['user']?['id'];
+        final user = result['user'];
+        final userId = user?['id'];
+        final userName = user?['name'];
+        final userEmail = user?['email'];
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('auth_token', token);
+        await prefs.setInt('user_id', userId);
+        if (userName != null) await prefs.setString('user_name', userName);
+        if (userEmail != null) await prefs.setString('user_email', userEmail);
 
         if (token == null || userId == null) {
           throw Exception('Token atau userId tidak ditemukan dalam response.');
@@ -70,17 +82,18 @@ class LoginViewModel extends ChangeNotifier {
 
         // 3. NAVIGASI TO THE POINT MENGGUNAKAN GLOBAL KEY
         // Ini adalah cara paling andal untuk navigasi setelah operasi async
+        // 3. NAVIGASI TO THE POINT MENGGUNAKAN GLOBAL KEY
         final navigator = navigatorKey.currentState;
 
         if (navigator != null) {
-          print("✅ Navigating to HomePageWidget using GlobalKey...");
+          print("✅ Navigating to MainNavigationPage using GlobalKey...");
           navigator.pushReplacement(
-            MaterialPageRoute(builder: (_) => const HomePageWidget()),
+            MaterialPageRoute(builder: (_) => const Navbar()),
           );
         } else if (context.mounted) {
           // Fallback, jika GlobalKey gagal
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const HomePageWidget()),
+            MaterialPageRoute(builder: (_) => const Navbar()),
           );
         }
       } else {
@@ -298,7 +311,14 @@ class _LoginView extends StatelessWidget {
                                     ),
                                   ),
                                   GestureDetector(
-                                    onTap: () {},
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                const RegisterPageWidget()),
+                                      );
+                                    },
                                     child: Text(
                                       'Sign up here',
                                       style:

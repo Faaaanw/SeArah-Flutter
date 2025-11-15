@@ -7,9 +7,9 @@ import 'package:searah_backend/pages/create_group_page.dart';
 import '../viewmodel/home_viewmodel.dart';
 import '../models/friend_model.dart';
 // Import model Event (Diasumsikan ada)
-import '../models/event_model.dart'; 
+import '../models/event_model.dart';
 // Import model Group
-import '../models/group_model.dart'; 
+import '../models/group_model.dart';
 
 // Definisi Konstanta Warna (Sama dengan di LoginPage)
 const Color _kPrimaryButtonColor = Color(0xFFFA8B60);
@@ -42,7 +42,7 @@ class _HomeView extends StatelessWidget {
       bottomPanelContent = const _CreateGroupPanel();
     } else {
       // 2. KONDISI: Punya Grup (Lanjut ke Tampilan Peta)
-      
+
       // *** LOGIKA PENYUSUNAN FRIEND LIST PANEL ***
       // NOTE: Logika ini HARUS disesuaikan nanti dengan state Event dan Current Group
       bottomPanelContent = _FriendListPanel(
@@ -50,7 +50,7 @@ class _HomeView extends StatelessWidget {
         currentEvent: null, // TODO: Isi dengan Event dari VM
       );
     }
-    
+
     // Untuk saat ini, kita selalu tampilkan panel sesuai desain
     // Jika Anda ingin panel hilang saat tidak ada Event/Friend, ubah showBottomPanel.
 
@@ -58,11 +58,11 @@ class _HomeView extends StatelessWidget {
       body: Stack(
         children: [
           // 1. Map Layer (Layer Bawah)
-          _buildMapLayer(context, vm.friends),
+          _buildMapLayer(context, vm, vm.friends),
 
           // 2. Search & Group Filter Bar (Layer Atas, Floating)
           _buildSearchAndFilter(context, vm),
-          
+
           // 3. Status/Friend List Panel (Layer Bawah, Sticky)
           if (showBottomPanel) // Tampilkan panel jika kondisi memenuhi
             Align(
@@ -83,57 +83,94 @@ class _HomeView extends StatelessWidget {
                 child: bottomPanelContent,
               ),
             ),
-          
+
           // 4. Floating Event Card (Sesuai Screenshot)
-          if (vm.hasGroups && !vm.isLoading) // Tampilkan di atas panel, jika ada grup
+          if (vm.hasGroups &&
+              !vm.isLoading) // Tampilkan di atas panel, jika ada grup
             Positioned(
               left: 20,
               right: 20,
-              bottom: MediaQuery.of(context).size.height * 0.45 - 20, // Posisi di atas panel
+              bottom: MediaQuery.of(context).size.height * 0.45 -
+                  20, // Posisi di atas panel
               child: const _EventCard(
                 event: null, // TODO: Isi dengan Event aktual
               ),
             ),
+          Positioned(
+            bottom: MediaQuery.of(context).size.height * 0.45 + 20,
+            right: 20,
+            child: _LocationSharingButton(vm: vm),
+          ),
         ],
       ),
-      
     );
   }
 
   // ... _buildMapLayer tetap sama ...
-  Widget _buildMapLayer(BuildContext context, List<Friend> friends) {
-    // ... (kode _buildMapLayer yang sama) ...
-    final initialCenter = LatLng(-6.8208, 107.1396);
-    final markers = friends
-        .where((f) => f.latitude != null && f.longitude != null)
-        .map((f) => Marker(
-              point: LatLng(f.latitude!, f.longitude!),
-              width: 60,
-              height: 60,
-              child: _FriendMapMarker(friend: f),
-            ))
-        .toList();
-    markers.add(
-      Marker(
-        point: initialCenter, // Ganti dengan lokasi user sendiri
-        width: 60,
-        height: 60,
-        child:
-            const Icon(Icons.person_pin_circle, color: Colors.blue, size: 40),
-      ),
-    );
-    return FlutterMap(
-      options: MapOptions(
-        initialCenter: initialCenter,
-        initialZoom: 13.0,
-      ),
-      children: [
-        TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.example.app',
+  Widget _buildMapLayer(
+    BuildContext context,
+    HomeViewModel vm,
+    List<Friend> friends,
+  ) {
+    final userLoc = vm.userLocation;
+
+    return RepaintBoundary(
+      child: FlutterMap(
+        mapController: vm.mapController,
+        options: MapOptions(
+          initialCenter: vm.mapCenter,
+          initialZoom: 13.0,
+          interactionOptions: const InteractionOptions(
+            flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+          ),
         ),
-        MarkerLayer(markers: markers),
-      ],
+        children: [
+          TileLayer(
+            urlTemplate:
+                'https://api.maptiler.com/maps/streets/{z}/{x}/{y}.jpg?key=nkV8u6JfP6d8DPcFsYJe',
+            additionalOptions: {'key': 'nkV8u6JfP6d8DPcFsYJe'},
+            userAgentPackageName: 'com.searah.app',
+            tileDimension: 256,
+            minZoom: 2,
+            maxZoom: 18,
+            keepBuffer: 2,
+          ),
+
+           Consumer<HomeViewModel>(
+            builder: (context, vm, _) {
+              final friendMarkers = vm.friends
+                  .where((f) => f.latitude != null && f.longitude != null)
+                  .map(
+                    (f) => Marker(
+                      point: LatLng(f.latitude!, f.longitude!),
+                      width: 60,
+                      height: 60,
+                      child: _FriendMapMarker(friend: f),
+                    ),
+                  )
+                  .toList();
+
+              final userMarker = Marker(
+                point: vm.userLocation,
+                width: 60,
+                height: 60,
+                child: const Icon(Icons.person_pin_circle,
+                    color: Colors.blue, size: 40),
+              );
+
+              return MarkerLayer(
+                key: ValueKey(
+                    friendMarkers.length + 1), // 🔥 ini kunci agar rebuild
+                markers: [...friendMarkers, userMarker],
+                
+              );
+              
+              
+            },
+            
+          ),
+        ],
+      ),
     );
   }
 
@@ -147,7 +184,7 @@ class _HomeView extends StatelessWidget {
         children: [
           Row(
             children: [
-              // Search Bar
+              // 🔸 Search bar
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -158,60 +195,114 @@ class _HomeView extends StatelessWidget {
                       BoxShadow(color: Colors.black12, blurRadius: 8)
                     ],
                   ),
-                  child: const TextField(
-                    decoration: InputDecoration(
+                  child: TextField(
+                    controller: vm.searchController,
+                    decoration: const InputDecoration(
                       hintText: 'Search Location',
                       border: InputBorder.none,
                       prefixIcon: Icon(Icons.search, color: _kPeachIconColor),
                       contentPadding: EdgeInsets.symmetric(vertical: 14),
                     ),
+                    onChanged: (query) {
+                      // 🔹 Jika query kosong, langsung hapus hasil
+                      if (query.isEmpty) {
+                        vm.clearSearchResults();
+                        return;
+                      }
+
+                      // 🔹 Jika panjang > 2, baru fetch suggestion
+                      if (query.length > 2) {
+                        vm.fetchSearchSuggestions(query);
+                      } else {
+                        vm.clearSearchResults();
+                      }
+                    },
+                    onSubmitted: (query) {
+                      FocusScope.of(context).unfocus();
+                      if (query.isEmpty) {
+                        vm.clearSearchResults();
+                        return;
+                      }
+                      vm.searchLocation(query);
+                      vm.clearSearchResults();
+                    },
                   ),
                 ),
               ),
               const SizedBox(width: 10),
-              // Group Dropdown & Filter Icon (Sesuai Gambar)
+              // 🔸 Group button
               _GroupDropdownButton(vm: vm),
             ],
           ),
-          const SizedBox(height: 10),
-          // Toggle Status Berbagi Lokasi User
-          Align(
-            alignment: Alignment.centerRight,
-            child: _LocationSharingToggle(vm: vm),
-          ),
+
+          // 🔸 Loading bar
+          if (vm.isSearching) const LinearProgressIndicator(minHeight: 2),
+
+          // 🔸 Daftar hasil pencarian
+          if (vm.searchResults.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black26, blurRadius: 5)
+                ],
+              ),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: vm.searchResults.length,
+                itemBuilder: (context, index) {
+                  final loc = vm.searchResults[index];
+                  final name = loc['display_name'] ?? 'Unknown';
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.location_on,
+                        color: _kPeachIconColor, size: 18),
+                    title: Text(name, style: const TextStyle(fontSize: 13)),
+                    onTap: () {
+                      FocusScope.of(context).unfocus(); // 🔹 Tutup keyboard
+                      final lat = double.tryParse(loc['lat'] ?? '0') ?? 0;
+                      final lon = double.tryParse(loc['lon'] ?? '0') ?? 0;
+                      vm.mapController.move(LatLng(lat, lon), 15.0);
+
+                      vm.searchController.text = name;
+                      vm.clearSearchResults();
+                    },
+                  );
+                },
+              ),
+            ),
         ],
       ),
     );
   }
-
-  
 }
-
-
 // --- 3. Widget State Teman (Disesuaikan) ---
 
 // 3.1. State: Panel yang Tampil saat tidak ada Event
 class _FriendListPanel extends StatelessWidget {
   final List<Friend> friends;
   final Event? currentEvent; // Event yang aktif (digunakan untuk Placeholder)
-  
+
   const _FriendListPanel({required this.friends, this.currentEvent});
 
   @override
   Widget build(BuildContext context) {
     // START: Hapus Placeholder Event Card di sini, digantikan oleh _EventCard di Stack
-    
+
     if (!friends.isNotEmpty) {
       // Belum Ada Teman (Tampilkan Connect Now)
       return const _ConnectNowPanel();
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Padding untuk menaikkan list di bawah Event Card
-        SizedBox(height: currentEvent != null ? 80 : 20), 
-        
+        SizedBox(height: currentEvent != null ? 80 : 20),
+
         const Padding(
           padding: EdgeInsets.only(left: 20.0, top: 8.0, bottom: 8.0),
           child: Text(
@@ -289,7 +380,8 @@ class _CreateGroupPanel extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.group_add_outlined, color: _kPeachIconColor, size: 60),
+          const Icon(Icons.group_add_outlined,
+              color: _kPeachIconColor, size: 60),
           const SizedBox(height: 16),
           const Text(
             "Anda belum bergabung dalam grup mana pun.",
@@ -329,7 +421,6 @@ class _CreateGroupPanel extends StatelessWidget {
   }
 }
 
-
 // --- 4. Widget Baru: Event Card dan Group Dropdown ---
 
 // 4.1 Event Card (Sesuai Gambar)
@@ -347,9 +438,7 @@ class _EventCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _kPrimaryButtonColor.withOpacity(0.9),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: const [
-          BoxShadow(color: Colors.black26, blurRadius: 10)
-        ],
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,7 +451,8 @@ class _EventCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(15),
               color: Colors.white, // Placeholder color
               image: const DecorationImage(
-                image: AssetImage('assets/images/event_placeholder.png'), // Ganti dengan path gambar Anda
+                image: AssetImage(
+                    'assets/images/event_placeholder.png'), // Ganti dengan path gambar Anda
                 fit: BoxFit.cover,
               ),
             ),
@@ -383,31 +473,37 @@ class _EventCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.calendar_today, color: Colors.white70, size: 14),
+                    const Icon(Icons.calendar_today,
+                        color: Colors.white70, size: 14),
                     const SizedBox(width: 4),
                     Text(
                       '20 Oct 2025', // event?.startTime
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
                 ),
                 Row(
                   children: [
-                    const Icon(Icons.access_time, color: Colors.white70, size: 14),
+                    const Icon(Icons.access_time,
+                        color: Colors.white70, size: 14),
                     const SizedBox(width: 4),
                     Text(
                       '18.00 - 20.00', // Format waktu
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
                 ),
                 Row(
                   children: [
-                    const Icon(Icons.location_on, color: Colors.white70, size: 14),
+                    const Icon(Icons.location_on,
+                        color: Colors.white70, size: 14),
                     const SizedBox(width: 4),
                     Text(
                       event?.locationName ?? 'SMKN 1 Cianjur',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
                 ),
@@ -424,7 +520,8 @@ class _EventCard extends StatelessWidget {
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Text('1.5Km ⬆️', style: TextStyle(color: Colors.white, fontSize: 10)),
+                child: const Text('1.5Km ⬆️',
+                    style: TextStyle(color: Colors.white, fontSize: 10)),
               ),
               const SizedBox(height: 10),
               // Avatar partisipan kecil (Sesuai gambar)
@@ -442,6 +539,37 @@ class _EventCard extends StatelessWidget {
   }
 }
 
+class _LocationSharingButton extends StatelessWidget {
+  final HomeViewModel vm;
+  const _LocationSharingButton({required this.vm});
+
+  @override
+  Widget build(BuildContext context) {
+    return FloatingActionButton(
+      heroTag: "btn-share-location",
+      backgroundColor:
+          vm.isUserSharingLocation ? Colors.green : Colors.grey.shade400,
+      onPressed: () {
+        // toggle on/off
+        vm.toggleLocationSharing(!vm.isUserSharingLocation);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(vm.isUserSharingLocation
+                ? '📍 Location sharing activated'
+                : '🚫 Location sharing stopped'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      },
+      child: Icon(
+        vm.isUserSharingLocation ? Icons.location_on : Icons.location_off,
+        color: Colors.white,
+      ),
+    );
+  }
+}
+
 // 4.2 Group Dropdown Button (Mengganti Search Bar di kanan)
 class _GroupDropdownButton extends StatelessWidget {
   final HomeViewModel vm;
@@ -449,77 +577,100 @@ class _GroupDropdownButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Tampilkan tombol ini hanya jika ada Grup
-    if (!vm.hasGroups) {
-      return Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
-        ),
-        child: const Icon(Icons.person, color: _kPeachIconColor, size: 28), // Ikon default
-      );
-    }
-    
-    // Logic Group Dropdown
-    // TODO: Definisikan _currentGroup di HomeViewModel dan gunakan di sini
-    final String? currentGroupId = null; // Ganti dengan vm.currentGroup?.id.toString()
-    final List<Group> groups = vm.groups;
-
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      height: 45,
+      width: 45,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
+        shape: BoxShape.circle,
         boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: currentGroupId, // Tetapkan nilai null/ID grup aktif
-          icon: const Icon(Icons.people, color: _kPeachIconColor),
-          hint: const Text('Pilih Grup', style: TextStyle(color: Colors.black87)),
-          items: [
-            // List Grup Aktif
-            ...groups.map((Group group) {
-              return DropdownMenuItem<String>(
-                value: group.id.toString(),
-                child: Text(group.name, overflow: TextOverflow.ellipsis),
-              );
-            }).toList(),
-            
-            // Pemisah
-            const DropdownMenuItem<String>(
-              value: 'divider',
-              enabled: false,
-              child: Divider(color: Colors.black12),
-            ),
-
-            // Opsi Create New Group
-            DropdownMenuItem<String>(
-              value: 'create_new',
-              child: Row(
-                children: [
-                  const Icon(Icons.add_circle_outline, size: 18, color: _kPrimaryButtonColor),
-                  const SizedBox(width: 6),
-                  Text('Create New Group', style: TextStyle(color: _kPrimaryButtonColor)),
-                ],
-              ),
-            ),
-          ],
-          onChanged: (String? newValue) {
-            if (newValue == 'create_new') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CreateGroupPage()),
-              );
-            } else if (newValue != null && newValue != 'divider') {
-              // TODO: Ganti Grup Aktif di ViewModel dan panggil sinkronisasi
-              // vm.setCurrentGroup(int.parse(newValue));
-            }
-          },
-        ),
+      child: IconButton(
+        icon: const Icon(Icons.group, color: _kPeachIconColor, size: 22),
+        onPressed: () => _showGroupModal(context),
       ),
+    );
+  }
+
+  void _showGroupModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      backgroundColor: Colors.white,
+      builder: (_) {
+        final groups = vm.groups;
+        final hasGroups = vm.hasGroups;
+
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Text(
+                'Your Groups',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              if (!hasGroups)
+                const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Text(
+                    'Belum ada grup. Buat grup baru untuk mulai berbagi lokasi!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.black54),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: groups.length,
+                    itemBuilder: (context, index) {
+                      final group = groups[index];
+                      return ListTile(
+                        leading:
+                            const Icon(Icons.group, color: _kPeachIconColor),
+                        title: Text(group.name),
+                        onTap: () {
+                          Navigator.pop(context);
+                          // TODO: Ganti grup aktif di ViewModel
+                          // vm.setCurrentGroup(group.id);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.add_circle_outline,
+                    color: _kPrimaryButtonColor),
+                title: const Text(
+                  'Create New Group',
+                  style: TextStyle(color: _kPrimaryButtonColor),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CreateGroupPage()),
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -620,4 +771,3 @@ class _FriendMapMarker extends StatelessWidget {
     );
   }
 }
-

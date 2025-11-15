@@ -2,13 +2,13 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:searah_backend/models/event_model.dart';
 import 'package:searah_backend/models/group_model.dart';
+import 'package:geolocator/geolocator.dart';
 
 class ApiService {
-  // ⚠️ Ganti dengan IP komputer kamu di jaringan lokal (bukan localhost)
-  // Misal: http://192.168.2.140:8000/api
-  static const String baseUrl = "http://192.168.1.18:8000/api";
+  //api route
+  static const String baseUrl = "http://192.168.1.8:8003/api";
 
-  // 🔐 LOGIN MANUAL
+  //  LOGIN MANUAL
   static Future<Map<String, dynamic>> login(
       String email, String password) async {
     final response = await http.post(
@@ -24,7 +24,7 @@ class ApiService {
     }
   }
 
-  // 🌐 LOGIN/REGISTER DENGAN GOOGLE
+  //  LOGIN/REGISTER DENGAN GOOGLE
   static Future<Map<String, dynamic>> googleLogin(String token,
       {bool useAccessToken = false}) async {
     final body = useAccessToken ? {'access_token': token} : {'id_token': token};
@@ -38,15 +38,19 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
-  // 🧾 REGISTER
-  static Future<Map<String, dynamic>> register(
-      String name, String email, String password) async {
+  //   REGISTER
+  static Future<Map<String, dynamic>> register(String name, String email,
+      String password, String confirmPassword) async {
     final response = await http.post(
       Uri.parse('$baseUrl/register'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'name': name, 'email': email, 'password': password}),
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'password': password,
+        'password_confirmation': confirmPassword,
+      }),
     );
-
     if (response.statusCode == 201) {
       return jsonDecode(response.body);
     } else {
@@ -54,7 +58,6 @@ class ApiService {
     }
   }
 
-  // 🔐 Ganti Password
   static Future<void> changePassword({
     required String token,
     required String currentPassword,
@@ -78,7 +81,7 @@ class ApiService {
     }
   }
 
-  // 🚪 LOGOUT
+  //   LOGOUT
   static Future<void> logout(String token) async {
     final response = await http.post(
       Uri.parse('$baseUrl/logout'),
@@ -93,7 +96,7 @@ class ApiService {
     }
   }
 
-  // 👤 Ambil profil user saat ini
+  //   Ambil profil user
   static Future<Map<String, dynamic>> getCurrentUser(String token) async {
     final response = await http.get(
       Uri.parse('$baseUrl/user'),
@@ -107,25 +110,26 @@ class ApiService {
     }
   }
 
-  // 👥 Ambil daftar teman (otomatis berdasarkan token)
+  //   Ambil daftar teman (otomatis berdasarkan token)
   static Future<List<dynamic>> getFriends(String token) async {
-    print("Calling getFriends with token: $token");
     final res = await http.get(
       Uri.parse('$baseUrl/friends/list'),
       headers: {'Authorization': 'Bearer $token'},
     );
 
-    print("Status: ${res.statusCode}");
-    print("Response: ${res.body}");
-
     if (res.statusCode == 200) {
-      return jsonDecode(res.body);
+      final body = jsonDecode(res.body);
+      if (body['success'] == true && body['data'] != null) {
+        return body['data']; // Ambil list dari key 'data'
+      } else {
+        return [];
+      }
     } else {
       throw Exception('Gagal mengambil daftar teman: ${res.body}');
     }
   }
 
-  // ➕ Kirim permintaan pertemanan
+  //   Kirim permintaan pertemanan
   static Future<Map<String, dynamic>> addFriend({
     required int userId,
     required int friendId,
@@ -162,10 +166,7 @@ class ApiService {
     }
   }
 
-  // 👥 Ambil daftar grup user
-
-  // 🆕 Buat grup baru
-
+  // 📍 Ambil lokasi teman-teman
   // 📍 Ambil lokasi teman-teman
   static Future<List<dynamic>> getFriendLocations(
       int userId, String token) async {
@@ -175,7 +176,14 @@ class ApiService {
     );
 
     if (res.statusCode == 200) {
-      return jsonDecode(res.body);
+      final body = jsonDecode(res.body);
+      if (body is Map && body['friends'] != null) {
+        return body['friends']; // ✅ ambil array "friends" saja
+      } else if (body is List) {
+        return body;
+      } else {
+        return [];
+      }
     } else {
       throw Exception('Gagal mengambil lokasi teman: ${res.body}');
     }
@@ -304,5 +312,97 @@ class ApiService {
       throw Exception(
           'Gagal mengambil event grup: ${jsonDecode(response.body)['message'] ?? 'Error server.'}');
     }
+  }
+
+  // 🌐 GET Request Umum (bisa digunakan untuk endpoint seperti /search-user)
+  static Future<Map<String, dynamic>> getRequest(
+      String endpoint, String token) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Gagal melakukan GET ke $endpoint: ${response.body}');
+    }
+  }
+
+  // 🚦 Ambil daftar permintaan teman yang belum diterima
+  static Future<List<dynamic>> getPendingRequests(String token) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/friends/requests/pending'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    print("Pending Friends Status: ${res.statusCode}");
+    print("Pending Friends Response: ${res.body}");
+
+    if (res.statusCode == 200) {
+      // Pastikan API mengembalikan list
+      final body = jsonDecode(res.body);
+      if (body is List) {
+        return body;
+      } else if (body['data'] != null) {
+        return body['data'];
+      } else {
+        throw Exception('Format respons tidak dikenal: ${res.body}');
+      }
+    } else {
+      throw Exception('Gagal mengambil permintaan teman: ${res.body}');
+    }
+  }
+
+  static Future<void> updateUserLocation({
+    required int userId,
+    required String token,
+    required double latitude,
+    required double longitude,
+    required bool isSharing,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/location/update'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'user_id': userId,
+        'latitude': latitude,
+        'longitude': longitude,
+        'is_sharing_location': isSharing,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Gagal update lokasi: ${response.body}');
+    }
+  }
+
+  // Di dalam class ApiService
+  static Future<List<dynamic>> searchLocation(String query,
+      {double? lat, double? lon}) async {
+    try {
+      String url = '$baseUrl/search-location?q=$query';
+      if (lat != null && lon != null) {
+        url += '&lat=$lat&lon=$lon';
+      }
+
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List) return data;
+      } else {
+        print('Gagal memuat lokasi (${response.statusCode})');
+      }
+    } catch (e) {
+      print('Error mencari lokasi: $e');
+    }
+    return [];
   }
 }

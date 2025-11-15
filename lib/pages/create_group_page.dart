@@ -1,39 +1,34 @@
-// File: lib/pages/create_group_page.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_services.dart';
 import '../viewmodel/home_viewmodel.dart';
+// Import model Group
+import '../models/group_model.dart'; 
 
 const Color _kPrimaryButtonColor = Color(0xFFFA8B60);
 const Color _kPeachIconColor = Color(0xFFBFA4A0);
 
 class CreateGroupPage extends StatefulWidget {
-  const CreateGroupPage({super.key});
+const CreateGroupPage({super.key});
 
-  @override
-  State<CreateGroupPage> createState() => _CreateGroupPageState();
+@override
+State<CreateGroupPage> createState() => _CreateGroupPageState();
 }
 
 class _CreateGroupPageState extends State<CreateGroupPage> {
-  final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController();
+final _formKey = GlobalKey<FormState>();
+final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
   final List<int> _selectedFriends = [];
   bool _isSubmitting = false;
+
   @override
   void initState() {
     super.initState();
-
-    // 🔥 Ambil daftar teman saat halaman ini dibuka
+    // 1. Hapus pemanggilan Future.microtask ganda
     Future.microtask(() {
       final vm = context.read<HomeViewModel>();
-      vm.fetchFriends();
-      Future.microtask(() async {
-        final vm = context.read<HomeViewModel>();
-        print("Auth token: ${vm.authToken}");
-        await vm.fetchFriends();
-        print("Friends loaded: ${vm.friends.length}");
-      });
+      vm.fetchFriends(); // Cukup panggil sekali
     });
   }
 
@@ -133,28 +128,40 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
       ),
     );
   }
+  
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descController.dispose();
+    super.dispose();
+  }
 
   Future<void> _createGroup(HomeViewModel vm) async {
-    if (vm.authToken == null || vm.currentUserId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Token atau User ID belum tersedia.')),
-      );
+    if (vm.authToken == null) {
+      // Cek authToken saja cukup karena dibutuhkan untuk API
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Token otentikasi belum tersedia.')),
+        );
+      }
       return;
     }
 
     setState(() => _isSubmitting = true);
 
     try {
-      // ✅ Sesuaikan pemanggilan API dengan format baru
-      final result = await ApiService.createGroup(
+      // Panggilan API yang diperbarui
+      final Group newGroup = await ApiService.createGroup(
         token: vm.authToken!,
         name: _nameController.text.trim(),
-        description: _descController.text.trim(),
+        description: _descController.text.trim().isEmpty 
+          ? null 
+          : _descController.text.trim(),
         memberIds: _selectedFriends,
       );
 
-      // Tambahkan ke ViewModel agar langsung terlihat
-      vm.addGroup(result['group']);
+      // Tambahkan objek Group yang dikembalikan ke ViewModel
+      vm.addGroup(newGroup);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -163,9 +170,14 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
         Navigator.pop(context);
       }
     } catch (e) {
+      // Tangani error dengan lebih baik
+      String errorMessage = e.toString().contains('Exception:') 
+        ? e.toString().substring(e.toString().indexOf(':') + 1).trim()
+        : 'Terjadi kesalahan tidak terduga.';
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Gagal membuat grup: $e')),
+          SnackBar(content: Text('❌ Gagal membuat grup: $errorMessage')),
         );
       }
     } finally {

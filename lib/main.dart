@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:searah_backend/Navigation/navbar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'viewmodel/home_viewmodel.dart';
+import 'viewmodel/friend_viewmodel.dart'; // ✅ Tambahkan import ini
 import 'pages/login_page.dart';
+
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -17,6 +19,7 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => HomeViewModel()),
+        ChangeNotifierProvider(create: (_) => FriendViewModel()), // ✅ Tambahkan ini
       ],
       child: MyApp(
         isLoggedIn: token != null && userId != null,
@@ -47,15 +50,15 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    final vm = context.read<HomeViewModel>();
 
-    if (widget.isLoggedIn && widget.token != null && widget.userId != null) {
-      vm.setUserSession(userId: widget.userId!, token: widget.token!);
-
-      // ✅ panggil di sini, bukan di build()
-      vm.loadUserProfile();
-      vm.loadInitialData();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final vm = context.read<HomeViewModel>();
+      if (widget.isLoggedIn && widget.token != null && widget.userId != null) {
+        vm.setUserSession(userId: widget.userId!, token: widget.token!);
+        await vm.loadUserProfile();
+        await vm.loadInitialData();
+      }
+    });
   }
 
   @override
@@ -64,9 +67,7 @@ class _MyAppState extends State<MyApp> {
       debugShowCheckedModeBanner: false,
       title: 'SeArah',
       navigatorKey: navigatorKey,
-      home: widget.isLoggedIn
-          ? const Navbar()
-          : const LoginPageWidget(),
+      home: widget.isLoggedIn ? const Navbar() : const LoginPageWidget(),
     );
   }
 }

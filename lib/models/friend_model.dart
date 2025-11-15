@@ -14,16 +14,19 @@ class Friend {
     this.latitude,
     this.longitude,
   });
-
   factory Friend.fromJson(Map<String, dynamic> json) {
     return Friend(
-      id: json['id'],
+      id: json['id'] ?? json['user_id'], // API Laravel pakai user_id
       name: json['name'] ?? '',
       email: json['email'] ?? '',
-      // konversi 0/1 ke bool
-      isSharingLocation: json['is_sharing_location'] == 1,
-      latitude: json['latitude']?.toDouble(),
-      longitude: json['longitude']?.toDouble(),
+      isSharingLocation: json['is_sharing_location'] == 1 ||
+          json['is_sharing_location'] == true,
+      latitude: json['latitude'] != null
+          ? double.tryParse(json['latitude'].toString())
+          : null,
+      longitude: json['longitude'] != null
+          ? double.tryParse(json['longitude'].toString())
+          : null,
     );
   }
 
