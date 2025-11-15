@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:searah_backend/models/event_model.dart';
+import 'package:searah_backend/models/friend_model.dart';
 import 'package:searah_backend/models/group_model.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -332,6 +333,32 @@ class ApiService {
     }
   }
 
+  static Future<List<dynamic>> getGroupMembersWithLocation({
+    required int groupId,
+    required String token,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/groups/$groupId/members-location'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+
+      // API mengembalikan {"members": [...]}
+      if (data["success"] == true && data["members"] != null) {
+        return data["members"];
+      } else {
+        return [];
+      }
+    } else {
+      throw Exception("Gagal mengambil anggota grup: ${response.body}");
+    }
+  }
+
   // 🚦 Ambil daftar permintaan teman yang belum diterima
   static Future<List<dynamic>> getPendingRequests(String token) async {
     final res = await http.get(
@@ -404,5 +431,33 @@ class ApiService {
       print('Error mencari lokasi: $e');
     }
     return [];
+  }
+
+  static Future<List<Friend>> getFriendsByGroup({
+    required int groupId,
+    required String token,
+  }) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/groups/$groupId/members-location'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+
+    if (res.statusCode == 200) {
+      final data = jsonDecode(res.body);
+
+      // API: { success: true, members: [...] }
+      final list = data['members'] as List;
+
+      return list.map((json) {
+        // ⬅️ inject groupId secara manual
+        json['group_id'] = groupId;
+        return Friend.fromJson(json);
+      }).toList();
+    } else {
+      throw Exception('Gagal ambil anggota grup: ${res.body}');
+    }
   }
 }

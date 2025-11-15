@@ -135,8 +135,7 @@ class _HomeView extends StatelessWidget {
             maxZoom: 18,
             keepBuffer: 2,
           ),
-
-           Consumer<HomeViewModel>(
+          Consumer<HomeViewModel>(
             builder: (context, vm, _) {
               final friendMarkers = vm.friends
                   .where((f) => f.latitude != null && f.longitude != null)
@@ -162,12 +161,8 @@ class _HomeView extends StatelessWidget {
                 key: ValueKey(
                     friendMarkers.length + 1), // 🔥 ini kunci agar rebuild
                 markers: [...friendMarkers, userMarker],
-                
               );
-              
-              
             },
-            
           ),
         ],
       ),
@@ -608,20 +603,15 @@ class _GroupDropdownButton extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
+              // ... drag handle & title ...
+              ListTile(
+                leading: const Icon(Icons.list, color: _kPeachIconColor),
+                title: const Text('All Groups'),
+                onTap: () {
+                  Navigator.pop(context);
+                  vm.setCurrentGroup(null);
+                },
               ),
-              const Text(
-                'Your Groups',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
               if (!hasGroups)
                 const Padding(
                   padding: EdgeInsets.all(20),
@@ -644,8 +634,7 @@ class _GroupDropdownButton extends StatelessWidget {
                         title: Text(group.name),
                         onTap: () {
                           Navigator.pop(context);
-                          // TODO: Ganti grup aktif di ViewModel
-                          // vm.setCurrentGroup(group.id);
+                          vm.setCurrentGroup(group.id);
                         },
                       );
                     },
@@ -655,16 +644,14 @@ class _GroupDropdownButton extends StatelessWidget {
               ListTile(
                 leading: const Icon(Icons.add_circle_outline,
                     color: _kPrimaryButtonColor),
-                title: const Text(
-                  'Create New Group',
-                  style: TextStyle(color: _kPrimaryButtonColor),
-                ),
+                title: const Text('Create New Group',
+                    style: TextStyle(color: _kPrimaryButtonColor)),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const CreateGroupPage()),
-                  );
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const CreateGroupPage()));
                 },
               ),
             ],

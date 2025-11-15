@@ -11,13 +11,16 @@ import 'package:geolocator/geolocator.dart';
 
 class HomeViewModel extends ChangeNotifier {
   // ====== State Utama ======
-  List<Friend> _friends = [];
+  List<Friend> _allFriends = []; // simpan semua teman
+  List<Friend> _friends = []; // yang difilter, untuk UI
   List<Group> _groups = [];
   bool _isLoadingGroups = false;
   String? _currentUserName;
   String? _currentUserEmail;
   List<Map<String, dynamic>> _friendLocations = [];
   List<Map<String, dynamic>> get friendLocations => _friendLocations;
+  int? _currentGroupId;
+  int? get currentGroupId => _currentGroupId;
 
   // 🆕 State Lokasi Pengguna & Stream Subscription
   LatLng _userLocation = LatLng(-6.8208, 107.1396); // Default
@@ -86,6 +89,50 @@ class HomeViewModel extends ChangeNotifier {
     _isLoadingGroups = false;
     _positionSubscription?.cancel(); // Pastikan stream berhenti saat logout
     safeNotifyListeners();
+  }
+
+// Saat user pilih grup
+  void setCurrentGroup(int? groupId) async {
+    _currentGroupId = groupId;
+
+    if (groupId == null) {
+      // All groups
+      _friends = List.from(_allFriends);
+      safeNotifyListeners();
+    } else {
+      // Ambil teman dari backend sesuai grup
+      await fetchFriendsByGroup(groupId);
+    }
+  }
+
+// Ambil teman dari backend per grup
+  Future<void> fetchFriendsByGroup(int groupId) async {
+    if (_authToken == null) return;
+
+    _isLoading = true;
+    safeNotifyListeners();
+
+    try {
+      final friendsInGroup = await ApiService.getFriendsByGroup(
+          groupId: groupId, token: _authToken!);
+
+      // Filter user sendiri
+      final friendsOnly =
+          friendsInGroup.where((f) => f.id != _currentUserId).toList();
+
+      // Update cache _allFriends supaya pindah ke "All Groups" tetap ada
+      _allFriends.removeWhere((f) => f.groupId == groupId);
+      _allFriends.addAll(friendsOnly);
+
+      _friends = friendsOnly;
+      await fetchFriendLocations(_authToken!); // optional, ambil lokasi teman
+    } catch (e) {
+      debugPrint('Gagal mengambil teman per grup: $e');
+      _friends = [];
+    } finally {
+      _isLoading = false;
+      safeNotifyListeners();
+    }
   }
 
   // ====== Load Profile ======
@@ -264,18 +311,31 @@ class HomeViewModel extends ChangeNotifier {
 
     try {
       final friendData = await ApiService.getFriends(_authToken!);
-      _friends = friendData.map((json) => Friend.fromJson(json)).toList();
+      _allFriends = friendData
+          .map((json) => Friend.fromJson(json))
+          .where(
+              (f) => f.id != _currentUserId) // Hanya teman, bukan user sendiri
+          .toList();
+
+      // Tampilkan sesuai currentGroupId
+      filterFriendsByGroup(_currentGroupId);
     } catch (e) {
       debugPrint('Gagal mengambil daftar teman: $e');
+      _allFriends = [];
       _friends = [];
     } finally {
       isLoadingFriends = false;
       safeNotifyListeners();
     }
-    for (var f in _friends) {
-      debugPrint(
-          '➡️ ${f.name} (${f.id}) - lat: ${f.latitude}, lng: ${f.longitude}');
+  }
+
+  void filterFriendsByGroup(int? groupId) {
+    if (groupId == null) {
+      _friends = List.from(_allFriends);
+    } else {
+      _friends = _allFriends.where((f) => f.groupId == groupId).toList();
     }
+    safeNotifyListeners();
   }
 
   void updateFriendLocationsOnMap() {
@@ -337,8 +397,8 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   // ====== Filter Grup (opsional) ======
-  void filterByGroup(String groupId) {
-    // TODO: filter teman berdasarkan grup tertentu
+  void filterByGroup(int groupId) {
+    _friends = _friends.where((f) => f.groupId == groupId).toList();
     safeNotifyListeners();
   }
 
@@ -431,4 +491,6 @@ class HomeViewModel extends ChangeNotifier {
       }
     });
   }
+
+  // Ambil teman hanya dari grup tertentu
 }
