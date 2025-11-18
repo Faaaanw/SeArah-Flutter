@@ -21,6 +21,11 @@ class HomeViewModel extends ChangeNotifier {
   List<Map<String, dynamic>> get friendLocations => _friendLocations;
   int? _currentGroupId;
   int? get currentGroupId => _currentGroupId;
+  Timer? _debounceSearch;
+  Map<String, List<dynamic>> _searchCache = {};
+  final Distance _distance = const Distance();
+  LatLng? _searchMarker;
+  LatLng? get searchMarker => _searchMarker;
 
   // 🆕 State Lokasi Pengguna & Stream Subscription
   LatLng _userLocation = LatLng(-6.8208, 107.1396); // Default
@@ -366,8 +371,8 @@ class HomeViewModel extends ChangeNotifier {
         friend.isSharingLocation = isSharing;
 
         if (isSharing) {
-          friend.latitude = (loc['latitude'] as num?)?.toDouble();
-          friend.longitude = (loc['longitude'] as num?)?.toDouble();
+          friend.latitude = _safeParseDouble(loc['latitude']);
+          friend.longitude = _safeParseDouble(loc['longitude']);
         } else {
           friend.latitude = null;
           friend.longitude = null;
@@ -388,8 +393,8 @@ class HomeViewModel extends ChangeNotifier {
         friend.isSharingLocation = isSharing;
 
         if (isSharing) {
-          friend.latitude = (loc['latitude'] as num?)?.toDouble();
-          friend.longitude = (loc['longitude'] as num?)?.toDouble();
+          friend.latitude = _safeParseDouble(loc['latitude']);
+          friend.longitude = _safeParseDouble(loc['longitude']);
         } else {
           friend.latitude = null;
           friend.longitude = null;
@@ -398,6 +403,14 @@ class HomeViewModel extends ChangeNotifier {
     }
 
     safeNotifyListeners();
+  }
+
+  double? _safeParseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 
   // ====== Fetch Friend Locations ======
@@ -454,29 +467,37 @@ class HomeViewModel extends ChangeNotifier {
     safeNotifyListeners();
 
     try {
-      final results = await ApiService.searchLocation(
-        query,
-        lat: _userLocation.latitude,
-        lon: _userLocation.longitude,
-      );
+      // PAKAI CACHE DULU JIKA ADA
+      List results;
+      if (_searchCache.containsKey(query)) {
+        results = _sortByDistance(_searchCache[query]!);
+      } else {
+        results = await ApiService.searchLocation(
+          query,
+          lat: _userLocation.latitude,
+          lon: _userLocation.longitude,
+        );
+        _searchCache[query] = results;
+      }
 
       if (results.isNotEmpty) {
-        final loc = results.first;
+        final loc = results.first; // hasil terdekat
+
         final lat = double.tryParse(loc['lat'] ?? '0');
         final lon = double.tryParse(loc['lon'] ?? '0');
+
         if (lat != null && lon != null) {
           _searchResultLocation = LatLng(lat, lon);
           mapController.move(_searchResultLocation!, 14.0);
+          _searchMarker = LatLng(lat, lon);
 
           debugPrint("✅ Lokasi ditemukan: $lat, $lon");
-        } else {
-          debugPrint("⚠️ Format lokasi tidak valid: $loc");
         }
       } else {
         debugPrint("❌ Lokasi tidak ditemukan");
       }
     } catch (e) {
-      debugPrint("Error mencari lokasi lewat backend: $e");
+      debugPrint("Error mencari lokasi: $e");
     } finally {
       _isLoading = false;
       safeNotifyListeners();
@@ -497,27 +518,43 @@ class HomeViewModel extends ChangeNotifier {
       return;
     }
 
-    _isSearching = true;
-    safeNotifyListeners();
+    // DEBOUNCE agar tidak spam API
+    _debounceSearch?.cancel();
+    _debounceSearch = Timer(const Duration(milliseconds: 400), () async {
+      // CEK CACHE
+      if (_searchCache.containsKey(query)) {
+        _searchResults = _sortByDistance(_searchCache[query]!);
+        safeNotifyListeners();
+        return;
+      }
 
-    try {
-      final results = await ApiService.searchLocation(
-        query,
-        lat: _userLocation.latitude,
-        lon: _userLocation.longitude,
-      );
-      _searchResults = results;
-    } catch (e) {
-      _searchResults = [];
-      debugPrint('Error fetchSearchSuggestions: $e');
-    } finally {
-      _isSearching = false;
+      _isSearching = true;
       safeNotifyListeners();
-    }
+
+      try {
+        final results = await ApiService.searchLocation(
+          query,
+          lat: _userLocation.latitude,
+          lon: _userLocation.longitude,
+        );
+
+        // SIMPAN KE CACHE
+        _searchCache[query] = results;
+
+        // SORT BERDASARKAN JARAK
+        _searchResults = _sortByDistance(results);
+      } catch (e) {
+        debugPrint('Error fetchSearchSuggestions: $e');
+        _searchResults = [];
+      } finally {
+        _isSearching = false;
+        safeNotifyListeners();
+      }
+    });
   }
 
   void clearSearchResults() {
-    searchResults.clear();
+    _searchResults = [];
     notifyListeners();
   }
 
@@ -526,6 +563,9 @@ class HomeViewModel extends ChangeNotifier {
     searchController.clear();
     _searchResults = [];
     _isSearching = false;
+
+    _searchMarker = null; // 🔥 Hapus marker pencarian
+
     safeNotifyListeners();
   }
 
@@ -537,5 +577,44 @@ class HomeViewModel extends ChangeNotifier {
     });
   }
 
-  // Ambil teman hanya dari grup tertentu
+  void setSearchMarker(double lat, double lon) {
+    _searchMarker = LatLng(lat, lon);
+    mapController.move(_searchMarker!, 15.0);
+    safeNotifyListeners();
+  }
+
+  List<dynamic> _sortByDistance(List results) {
+    return List.from(results)
+      ..sort((a, b) {
+        final latA = double.tryParse(a['lat'] ?? '0') ?? 0;
+        final lonA = double.tryParse(a['lon'] ?? '0') ?? 0;
+        final latB = double.tryParse(b['lat'] ?? '0') ?? 0;
+        final lonB = double.tryParse(b['lon'] ?? '0') ?? 0;
+
+        final dA = _distance.as(
+            LengthUnit.Meter,
+            LatLng(_userLocation.latitude, _userLocation.longitude),
+            LatLng(latA, lonA));
+
+        final dB = _distance.as(
+            LengthUnit.Meter,
+            LatLng(_userLocation.latitude, _userLocation.longitude),
+            LatLng(latB, lonB));
+
+        return dA.compareTo(dB); // urutkan ascending
+      });
+  }
+
+  void clearSearchField() {
+    searchController.clear(); // clear tulisan
+    clearSearchResults(); // hapus daftar hasil
+    clearSearchMarker(); // hapus marker di map
+    mapController.move(userLocation, 15.0);
+    safeNotifyListeners(); // update UI
+  }
+
+  void clearSearchMarker() {
+    _searchMarker = null;
+    safeNotifyListeners();
+  }
 }

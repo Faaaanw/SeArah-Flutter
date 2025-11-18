@@ -47,7 +47,8 @@ class _HomeView extends StatelessWidget {
       // NOTE: Logika ini HARUS disesuaikan nanti dengan state Event dan Current Group
       bottomPanelContent = _FriendListPanel(
         friends: vm.friends,
-        currentEvent: null, // TODO: Isi dengan Event dari VM
+        currentUserId: vm.currentUserId ?? 0, // FIX: ubah ke int non-null
+        currentEvent: null,
       );
     }
 
@@ -138,6 +139,7 @@ class _HomeView extends StatelessWidget {
           Consumer<HomeViewModel>(
             builder: (context, vm, _) {
               final friendMarkers = vm.friendsForMap
+                  .where((f) => f.id != vm.currentUserId)
                   .map(
                     (f) => Marker(
                       point: LatLng(f.latitude!, f.longitude!),
@@ -147,7 +149,6 @@ class _HomeView extends StatelessWidget {
                     ),
                   )
                   .toList();
-
               final userMarker = Marker(
                 point: vm.userLocation,
                 width: 60,
@@ -157,9 +158,27 @@ class _HomeView extends StatelessWidget {
               );
 
               return MarkerLayer(
-                key: ValueKey(
-                    friendMarkers.length + 1), // 🔥 ini kunci agar rebuild
-                markers: [...friendMarkers, userMarker],
+                key: ValueKey(friendMarkers.length + 1),
+                markers: [
+                  // 🔴 Marker Teman
+                  ...friendMarkers,
+
+                  // 🔵 Marker Hasil Pencarian
+                  if (vm.searchMarker != null)
+                    Marker(
+                      point: vm.searchMarker!,
+                      width: 60,
+                      height: 60,
+                      child: const Icon(
+                        Icons.location_on,
+                        color: Colors.blue, // 🔵 BEDA DARI USER
+                        size: 40,
+                      ),
+                    ),
+
+                  // 🟢 Marker User
+                  userMarker,
+                ],
               );
             },
           ),
@@ -191,20 +210,30 @@ class _HomeView extends StatelessWidget {
                   ),
                   child: TextField(
                     controller: vm.searchController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: 'Search Location',
                       border: InputBorder.none,
-                      prefixIcon: Icon(Icons.search, color: _kPeachIconColor),
-                      contentPadding: EdgeInsets.symmetric(vertical: 14),
+                      prefixIcon:
+                          const Icon(Icons.search, color: _kPeachIconColor),
+
+                      // 🔥 Tambahkan tombol CLEAR di sini
+                      suffixIcon: vm.searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, color: Colors.grey),
+                              onPressed: () {
+                                vm.clearSearchField(); // << fungsi di ViewModel
+                              },
+                            )
+                          : null,
+
+                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     onChanged: (query) {
-                      // 🔹 Jika query kosong, langsung hapus hasil
                       if (query.isEmpty) {
-                        vm.clearSearchResults();
+                        vm.clearSearchField(); // sekarang clear marker dan results juga
                         return;
                       }
 
-                      // 🔹 Jika panjang > 2, baru fetch suggestion
                       if (query.length > 2) {
                         vm.fetchSearchSuggestions(query);
                       } else {
@@ -214,7 +243,7 @@ class _HomeView extends StatelessWidget {
                     onSubmitted: (query) {
                       FocusScope.of(context).unfocus();
                       if (query.isEmpty) {
-                        vm.clearSearchResults();
+                        vm.clearSearchField();
                         return;
                       }
                       vm.searchLocation(query);
@@ -256,10 +285,12 @@ class _HomeView extends StatelessWidget {
                         color: _kPeachIconColor, size: 18),
                     title: Text(name, style: const TextStyle(fontSize: 13)),
                     onTap: () {
-                      FocusScope.of(context).unfocus(); // 🔹 Tutup keyboard
+                      FocusScope.of(context).unfocus();
+
                       final lat = double.tryParse(loc['lat'] ?? '0') ?? 0;
                       final lon = double.tryParse(loc['lon'] ?? '0') ?? 0;
-                      vm.mapController.move(LatLng(lat, lon), 15.0);
+
+                      vm.setSearchMarker(lat, lon);
 
                       vm.searchController.text = name;
                       vm.clearSearchResults();
@@ -278,40 +309,46 @@ class _HomeView extends StatelessWidget {
 // 3.1. State: Panel yang Tampil saat tidak ada Event
 class _FriendListPanel extends StatelessWidget {
   final List<Friend> friends;
-  final Event? currentEvent; // Event yang aktif (digunakan untuk Placeholder)
+  final Event? currentEvent;
+  final int currentUserId;
 
-  const _FriendListPanel({required this.friends, this.currentEvent});
+  const _FriendListPanel({
+    required this.friends,
+    required this.currentUserId,
+    this.currentEvent,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // START: Hapus Placeholder Event Card di sini, digantikan oleh _EventCard di Stack
-
-    if (!friends.isNotEmpty) {
-      // Belum Ada Teman (Tampilkan Connect Now)
+    if (friends.isEmpty) {
       return const _ConnectNowPanel();
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Padding untuk menaikkan list di bawah Event Card
         SizedBox(height: currentEvent != null ? 80 : 20),
-
         const Padding(
           padding: EdgeInsets.only(left: 20.0, top: 8.0, bottom: 8.0),
           child: Text(
-            'Your Friend\'s', // Sesuai screenshot
+            'Your Friend\'s',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ),
-
         Expanded(
-          child: ListView.builder(
-            padding: EdgeInsets.zero,
-            itemCount: friends.length,
-            itemBuilder: (context, index) {
-              final friend = friends[index];
-              return _FriendListItem(friend: friend);
+          child: Builder(
+            builder: (_) {
+              final filtered =
+                  friends.where((f) => f.id != currentUserId).toList();
+
+              return ListView.builder(
+                padding: EdgeInsets.zero,
+                itemCount: filtered.length,
+                itemBuilder: (context, index) {
+                  final friend = filtered[index];
+                  return _FriendListItem(friend: friend);
+                },
+              );
             },
           ),
         ),
@@ -662,42 +699,6 @@ class _GroupDropdownButton extends StatelessWidget {
 }
 
 // ... _LocationSharingToggle (diubah untuk menghapus Group Dropdown lama) ...
-class _LocationSharingToggle extends StatelessWidget {
-  final HomeViewModel vm;
-  const _LocationSharingToggle({required this.vm});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min, // Penting agar tidak melebar
-        children: [
-          Text(
-            vm.isUserSharingLocation ? 'Sharing' : 'Hidden',
-            style: TextStyle(
-              fontSize: 14,
-              color: vm.isUserSharingLocation ? Colors.green : Colors.red,
-            ),
-          ),
-          Switch(
-            value: vm.isUserSharingLocation,
-            onChanged: vm.toggleLocationSharing,
-            activeColor: _kPrimaryButtonColor,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ... Widget lainnya (_FriendListItem, _FriendMapMarker) tetap sama ...
-
 // 3.2.1 Item Daftar Teman
 class _FriendListItem extends StatelessWidget {
   final Friend friend;
