@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:searah_backend/services/api_services.dart';
 import 'package:searah_backend/pages/login_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:searah_backend/models/user_model.dart';
+import 'package:searah_backend/services/api_services.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -11,166 +12,340 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  String? _name;
-  String? _email;
-  String? _token;
-  bool _isLoading = false;
+  User? user;
+  bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    loadUser();
   }
 
-  /// 🔹 Ambil data user dari SharedPreferences
-  Future<void> _loadUserData() async {
+  Future<void> loadUser() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _name = prefs.getString('user_name') ?? 'Pengguna';
-      _email = prefs.getString('user_email') ?? 'email@contoh.com';
-      _token = prefs.getString('auth_token');
-    });
-  }
+    final token = prefs.getString('auth_token'); // ← FIXED
 
-  /// 🔹 Logout user dari server dan hapus session lokal
-  Future<void> _logout() async {
-    setState(() => _isLoading = true);
+    print("TOKEN = $token");
+
+    if (token == null) {
+      setState(() => isLoading = false);
+      return;
+    }
 
     try {
-      if (_token != null) {
-        await ApiService.logout(_token!);
-      }
+      final result = await ApiService.getCurrentUser(token);
+      print("API RESULT = $result");
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      final userJson = result['user'] ?? result['data'] ?? result;
 
-      if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const LoginPageWidget()),
-          (_) => false,
-        );
+      if (userJson != null) {
+        setState(() {
+          user = User.fromJson(userJson);
+          isLoading = false;
+        });
+      } else {
+        setState(() => isLoading = false);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal logout: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      print("Error load user: $e");
+      setState(() => isLoading = false);
     }
   }
 
-  /// 🔹 Dialog ganti password
-  Future<void> _showChangePasswordDialog() async {
-    final currentController = TextEditingController();
-    final newController = TextEditingController();
+  Future<void> logoutUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Ganti Password"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: currentController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: "Password Lama",
-              ),
-            ),
-            TextField(
-              controller: newController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: "Password Baru",
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            child: const Text("Batal"),
-            onPressed: () => Navigator.pop(context),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFA8B60),
-            ),
-            onPressed: () async {
-              if (_token == null) return;
+    if (token != null) {
+      try {
+        await ApiService.logout(token);
+      } catch (e) {
+        print("Logout API error: $e");
+      }
+    }
 
-              try {
-                await ApiService.changePassword(
-                  token: _token!,
-                  currentPassword: currentController.text,
-                  newPassword: newController.text,
-                );
+    // Hapus semua data session
+    await prefs.clear();
 
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Password berhasil diganti")),
-                  );
-                }
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Gagal: $e')),
-                );
-              }
-            },
-            child: const Text("Simpan"),
-          ),
-        ],
-      ),
+    if (!mounted) return;
+
+    // Arahkan ke LoginPage, hapus semua history
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPageWidget()),
+      (route) => false,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final name = user?.name ?? "Guest User";
+    final email = user?.email ?? "-";
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profil Saya'),
-        centerTitle: true,
-        backgroundColor: const Color(0xFFFA8B60),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  const SizedBox(height: 30),
-                  const CircleAvatar(
-                    radius: 45,
-                    backgroundColor: Color(0xFFFA8B60),
-                    child: Icon(Icons.person, color: Colors.white, size: 50),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    _name ?? '-',
-                    style: const TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    _email ?? '-',
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 40),
-                  ListTile(
-                    leading: const Icon(Icons.lock_outline),
-                    title: const Text('Ganti Password'),
-                    onTap: _showChangePasswordDialog,
-                  ),
-                  const Divider(),
-                  ListTile(
-                    leading: const Icon(Icons.logout, color: Colors.red),
-                    title: const Text('Logout'),
-                    onTap: _logout,
-                  ),
-                ],
+      backgroundColor: const Color(0xFFFFF0F5),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              const SizedBox(height: 20),
+
+              // ===== AVATAR =====
+              CircleAvatar(
+                radius: 60,
+                backgroundImage:
+                    NetworkImage("https://i.pravatar.cc/200?u=$email"),
               ),
+
+              const SizedBox(height: 15),
+
+              // ===== NAMA =====
+              Text(
+                name,
+                style:
+                    const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+
+              const SizedBox(height: 4),
+
+              // ===== EMAIL =====
+              Text(
+                email,
+                style: const TextStyle(color: Colors.black54, fontSize: 14),
+              ),
+
+              const SizedBox(height: 30),
+
+              // ===== MENU CARD =====
+              _buildMenu(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenu() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(40),
+          topRight: Radius.circular(40),
+        ),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+          _menuTile(
+            Icons.person,
+            Colors.pink,
+            "Edit profile",
+            onTap: showEditProfilePopup,
+          ),
+          _menuTile(Icons.settings, Colors.orange, "Settings"),
+          _menuTile(Icons.help_outline, Colors.black54, "Help"),
+          _menuTileLogout(Icons.logout, Colors.red, "Logout"),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _menuTileLogout(IconData icon, Color iconColor, String title) {
+    return Column(
+      children: [
+        ListTile(
+          onTap: logoutUser, // ← langsung panggil logout
+          leading: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(14),
             ),
+            child: Icon(icon, color: iconColor),
+          ),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: iconColor, // Warna merah biar berbeda
+            ),
+          ),
+          trailing: Icon(Icons.arrow_forward_ios,
+              size: 16, color: iconColor.withOpacity(0.8)),
+        ),
+        const Divider(height: 1),
+      ],
+    );
+  }
+
+  Widget _menuTile(IconData icon, Color iconColor, String title,
+      {VoidCallback? onTap}) {
+    return Column(
+      children: [
+        ListTile(
+          onTap: onTap,
+          leading: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: iconColor),
+          ),
+          title: Text(
+            title,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+          ),
+          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        ),
+        const Divider(height: 1),
+      ],
+    );
+  }
+
+  void showEditProfilePopup() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) {
+        return SizedBox(
+          height: 170,
+          child: Column(
+            children: [
+              ListTile(
+                leading: Icon(Icons.edit, color: Colors.blue),
+                title: Text("Edit Nama"),
+                onTap: () {
+                  Navigator.pop(context);
+                  showEditNamePopup();
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.lock, color: Colors.orange),
+                title: Text("Ganti Password"),
+                onTap: () {
+                  Navigator.pop(context);
+                  showEditPasswordPopup();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void showEditNamePopup() {
+    final controller = TextEditingController(text: user?.name ?? "");
+
+    showDialog(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          title: Text("Edit Nama"),
+          content: TextField(
+            controller: controller,
+            decoration: InputDecoration(labelText: "Nama baru"),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Batal"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                final token = prefs.getString('auth_token');
+
+                if (token == null) return;
+
+                try {
+                  await ApiService.updateName(
+                      token: token, name: controller.text);
+
+                  setState(() {
+                    user = user?.copyWith(name: controller.text);
+                  });
+
+                  Navigator.pop(context);
+                } catch (e) {
+                  print("Error update nama: $e");
+                }
+              },
+              child: const Text("Simpan"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void showEditPasswordPopup() {
+    final oldPass = TextEditingController();
+    final newPass = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          title: Text("Ganti Password"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: oldPass,
+                obscureText: true,
+                decoration: InputDecoration(labelText: "Password lama"),
+              ),
+              TextField(
+                controller: newPass,
+                obscureText: true,
+                decoration: InputDecoration(labelText: "Password baru"),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Batal"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                final token = prefs.getString('auth_token');
+
+                if (token == null) return;
+
+                try {
+                  await ApiService.changePassword(
+                    token: token,
+                    currentPassword: oldPass.text,
+                    newPassword: newPass.text,
+                  );
+
+                  Navigator.pop(context);
+                } catch (e) {
+                  print("Error ganti password: $e");
+                }
+              },
+              child: const Text("Simpan"),
+            ),
+          ],
+        );
+      },
     );
   }
 }

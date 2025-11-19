@@ -15,8 +15,20 @@ class User {
         id: json['id'],
         name: json['name'],
         email: json['email'],
-        isSharingLocation: json['is_sharing_location'] == 1 || json['is_sharing_location'] == true,
+        isSharingLocation: json['is_sharing_location'] == 1 ||
+            json['is_sharing_location'] == true,
       );
-      
-      
+  User copyWith({
+    int? id,
+    String? name,
+    String? email,
+    bool? isSharingLocation,
+  }) {
+    return User(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      isSharingLocation: isSharingLocation ?? this.isSharingLocation,
+    );
+  }
 }

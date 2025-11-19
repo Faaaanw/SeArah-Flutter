@@ -7,7 +7,7 @@ import 'package:geolocator/geolocator.dart';
 
 class ApiService {
   //api route
-  static const String baseUrl = "http://192.168.1.8:8003/api";
+  static const String baseUrl = "http://192.168.1.7:8003/api";
 
   //  LOGIN MANUAL
   static Future<Map<String, dynamic>> login(
@@ -108,6 +108,24 @@ class ApiService {
       return jsonDecode(response.body);
     } else {
       throw Exception('Gagal mengambil data user: ${response.body}');
+    }
+  }
+
+  static Future<void> updateName({
+    required String token,
+    required String name,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/user/update-name'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'name': name}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Gagal update nama: ${response.body}');
     }
   }
 

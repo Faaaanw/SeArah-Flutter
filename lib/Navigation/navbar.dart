@@ -21,7 +21,7 @@ class _NavbarState extends State<Navbar> {
 
   final List<Widget> _pages = const [
     HomePageWidget(),
-    NotificationPage(),
+    NotificationsPage(),
     FriendsPage(),
     ProfilePage(),
   ];
