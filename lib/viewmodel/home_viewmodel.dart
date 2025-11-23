@@ -225,13 +225,12 @@ class HomeViewModel extends ChangeNotifier {
     bool serviceEnabled;
     LocationPermission permission;
 
-    // 1. Cek Service
+    // ... (Bagian cek permission di atas TETAP SAMA, jangan diubah) ...
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       return Future.error('Location services are disabled.');
     }
 
-    // 2. Cek Permission
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
@@ -245,9 +244,10 @@ class HomeViewModel extends ChangeNotifier {
           'Location permissions are permanently denied, we cannot request permissions.');
     }
 
-    // 3. Ambil Posisi
+    // 🔥 BAGIAN YANG DIUBAH: Tambahkan timeLimit
     return await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
+      timeLimit: const Duration(seconds: 5), // Menyerah setelah 5 detik
     );
   }
 
@@ -780,6 +780,73 @@ class HomeViewModel extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+}
+
+extension HomeViewModelRefresh on HomeViewModel {
+  /// 🔄 Smart Refresh: Tidak bikin layar putih & Urutan Data Benar
+  Future<void> refreshData() async {
+    if (_authToken == null || _currentUserId == null) return;
+
+    // ❌ JANGAN set _isLoading = true di sini!
+    // Biarkan UI lama tetap tampil. Indikator loading cukup dari RefreshIndicator/Tombol.
+
+    // Kita pakai flag lokal atau state khusus jika perlu, tapi untuk refresh,
+    // biarkan user melihat data lama sampai data baru "pop" muncul.
+
+    try {
+      debugPrint("🔹 Refresh dimulai: Mengambil Grup dulu...");
+
+      // 1. LANGKAH KRITIS: Ambil Grup DULUAN (Serial)
+      // Kita harus pastikan grup terupdate sebelum minta data teman/event
+      await fetchGroups();
+
+      // Pastikan ada grup yang dipilih
+      final groupId =
+          _currentGroupId ?? (_groups.isNotEmpty ? _groups.first.id : null);
+
+      // Jika grup berubah/hilang, update state
+      if (_currentGroupId != groupId) {
+        _currentGroupId = groupId;
+      }
+
+      debugPrint("🔹 Grup OK (ID: $groupId). Mengambil data paralel...");
+
+      // 2. LANGKAH PARALEL: Ambil sisa data SEKALIGUS
+      // Profil, Lokasi Teman, dan (Teman + Event berdasarkan Grup ID tadi)
+      await Future.wait([
+        loadUserProfile(),
+        fetchFriendLocations(_authToken!),
+
+        // Hanya fetch teman & event jika ada grup
+        if (groupId != null) ...[
+          fetchFriendsByGroup(groupId),
+          fetchEvents(groupId),
+        ] else ...[
+          // Jika tidak ada grup, kosongkan list dengan aman
+          Future(() {
+            _friends = [];
+            _events = [];
+          })
+        ]
+      ]);
+
+      // 3. GPS (Fire and Forget)
+      // Jalankan GPS di background saja, jangan tunggu dia selesai untuk menyelesaikan refresh
+      // Ini bikin refresh terasa "instan"
+      _getCurrentUserPositionOnce().then((_) {
+        debugPrint("📍 GPS Refreshed (Background)");
+      }).catchError((e) {
+        debugPrint("⚠️ GPS Background Error: $e");
+      });
+
+      debugPrint("✅ Refresh data selesai & UI di-update");
+    } catch (e) {
+      debugPrint("❌ Gagal refresh data: $e");
+    } finally {
+      // Pastikan UI di-rebuild dengan data baru
+      safeNotifyListeners();
     }
   }
 }

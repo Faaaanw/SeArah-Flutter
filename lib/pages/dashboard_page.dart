@@ -91,9 +91,6 @@ class _HomeViewState extends State<_HomeView> {
       // 1. Belum ada Grup: Tampilkan panel untuk buat grup
       bottomPanelContent = const _CreateGroupPanel();
     } else if (vm.friends.isEmpty) {
-      // 2. Sudah ada Grup, tapi teman kosong: Tampilkan placeholder/tombol navigasi
-      // Anda harus memastikan widget _EmptyFriendListPlaceholder (atau yang setara)
-      // sudah Anda definisikan di luar _HomeView, seperti pada jawaban saya sebelumnya.
       bottomPanelContent =
           const _EmptyFriendListPlaceholder(); // <--- BARIS KRITIS
     } else {
@@ -102,8 +99,6 @@ class _HomeViewState extends State<_HomeView> {
         friends: vm.friends,
         currentUserId: vm.currentUserId ?? 0,
         currentUserLocation: vm.userLocation,
-        // currentEvent tidak perlu karena sudah tersedia melalui provider
-        // currentEvent: null,
       );
     }
 // Akhir dari PERBAIKAN LOGIC UTAMA BOTTOM PANEL
@@ -117,6 +112,11 @@ class _HomeViewState extends State<_HomeView> {
 
           // 2. Search & Filter
           _buildSearchAndFilter(context, vm),
+          Positioned(
+            top: 120, // Jarak dari atas (di bawah search bar)
+            right: 24, // Rata kanan sejajar margin
+            child: _buildRefreshFloatingButton(context, vm),
+          ),
 
           // 3. Bottom Panel (Background Putih Melengkung)
           if (vm.hasGroups && !vm.isLoading && !vm.isEventLoading)
@@ -147,29 +147,23 @@ class _HomeViewState extends State<_HomeView> {
                   ],
                 ),
                 child: Padding(
-                  // LOGIC 2: PADDING ATAS LIST TEMAN
-                  // Jika ada event: 60.0 (Supaya list tidak ketutup Event Card yang melayang)
-                  // Jika TIDAK ada event: 25.0 (Padding normal/standar)
                   padding:
-                      EdgeInsets.only(top: vm.events.isNotEmpty ? 60.0 : 25.0),
+                      EdgeInsets.only(top: vm.events.isNotEmpty ? 20.0 : 10.0),
                   child: bottomPanelContent,
                 ),
               ),
             ),
 
-          // 4. Event Card Carousel (Posisi Floating)
-          // Hanya muncul jika events TIDAK kosong
-          if (vm.hasGroups && vm.events.isNotEmpty)
+          if (vm.hasGroups && sortedEvents.isNotEmpty)
             Positioned(
               left: 0,
               right: 0,
-              // Posisi tetap di perbatasan panel 0.40
               bottom: (MediaQuery.of(context).size.height * 0.40) - 50,
               child: SizedBox(
                 height: 100,
                 child: PageView.builder(
                   controller: _pageController,
-                  itemCount: sortedEvents.length,
+                  itemCount: sortedEvents.length, // Pakai sortedEvents
                   onPageChanged: (index) {
                     setState(() => _currentIndex = index);
                     vm.setCurrentEvent(sortedEvents[index]);
@@ -179,7 +173,7 @@ class _HomeViewState extends State<_HomeView> {
                       padding: const EdgeInsets.symmetric(horizontal: 24),
                       child: _EventCard(
                         userLocation: vm.userLocation,
-                        event: sortedEvents[index],
+                        event: sortedEvents[index], // Pakai sortedEvents
                       ),
                     );
                   },
@@ -188,26 +182,30 @@ class _HomeViewState extends State<_HomeView> {
               ),
             ),
 
-          // Tombol Navigasi Kiri Kanan (Hanya jika ada event)
-          if (vm.hasGroups && vm.events.isNotEmpty) ...[
-            // ... (Kode tombol chevron kiri/kanan tetap sama)
+          // Tombol Navigasi Kiri Kanan
+          // 🔥 FIX 2: Ganti 'vm.events.isNotEmpty' jadi 'sortedEvents.isNotEmpty'
+          if (vm.hasGroups && sortedEvents.isNotEmpty) ...[
+            // TOMBOL KIRI
             Positioned(
               left: 10,
-              bottom: (MediaQuery.of(context).size.height * 0.40) -
-                  20, // Sesuaikan posisi tombol juga jika perlu
+              bottom: (MediaQuery.of(context).size.height * 0.40) - 20,
               child: IconButton(
                 icon: const Icon(Icons.chevron_left,
                     color: Colors.white, size: 30),
                 onPressed: _goToPrevious,
               ),
             ),
+
+            // TOMBOL KANAN
             Positioned(
               right: 10,
               bottom: (MediaQuery.of(context).size.height * 0.40) - 20,
               child: IconButton(
                 icon: const Icon(Icons.chevron_right,
                     color: Colors.white, size: 30),
-                onPressed: () => _goToNext(vm.events.length),
+                // 🔥 FIX 3: Jangan pakai vm.events.length, nanti error index out of range!
+                // Pakai sortedEvents.length
+                onPressed: () => _goToNext(sortedEvents.length),
               ),
             ),
           ],
@@ -222,6 +220,52 @@ class _HomeViewState extends State<_HomeView> {
       ),
     );
   }
+}
+
+Widget _buildRefreshFloatingButton(BuildContext context, HomeViewModel vm) {
+  return Container(
+    height: 45,
+    width: 45,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      shape: BoxShape.circle,
+      boxShadow: const [
+        BoxShadow(
+          color: Colors.black12,
+          blurRadius: 10,
+          offset: Offset(0, 4),
+        )
+      ],
+    ),
+    child: Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(30),
+        onTap: () {
+          // Panggil fungsi refresh yang me-reload SEMUA data
+          // (Teman, Grup, Lokasi, Event)
+          vm.refreshData();
+
+          // Opsional: Tampilkan snackbar kecil feedback
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Refreshing data..."),
+              duration: Duration(seconds: 1),
+              behavior: SnackBarBehavior.floating,
+              margin: EdgeInsets.only(bottom: 20, left: 20, right: 20),
+            ),
+          );
+        },
+        child: vm.isLoading
+            ? const Padding(
+                padding: EdgeInsets.all(10.0),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: _kPrimaryColor),
+              )
+            : const Icon(Icons.refresh, color: _kPrimaryColor, size: 24),
+      ),
+    ),
+  );
 }
 
 // ... _buildMapLayer (Logic Tetap Sama) ...
@@ -308,7 +352,7 @@ Widget _buildMapLayer(
                       ),
                       width: 150,
                       height: 60, // Tambah tinggi untuk padding
-                     
+
                       child: Transform.translate(
                         offset: const Offset(0, -50), // Naikkan posisi pop-up
                         child: GestureDetector(
@@ -500,16 +544,18 @@ Widget _buildSearchAndFilter(BuildContext context, HomeViewModel vm) {
 
 // --- 3. Widget Panel Teman (Desain Baru) ---
 
+// ... (Kode Import di atas tetap sama)
+
 class _FriendListPanel extends StatelessWidget {
   final List<Friend> friends;
   final int currentUserId;
-  final LatLng currentUserLocation; // 1. Tambahkan variabel ini
+  final LatLng currentUserLocation;
 
   const _FriendListPanel({
     super.key,
     required this.friends,
     required this.currentUserId,
-    required this.currentUserLocation, // 2. Tambahkan ke constructor
+    required this.currentUserLocation,
   });
 
   @override
@@ -520,7 +566,7 @@ class _FriendListPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: 10.0),
+          padding: EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
             'Your Friend\'s',
             style: TextStyle(
@@ -530,20 +576,33 @@ class _FriendListPanel extends StatelessWidget {
             ),
           ),
         ),
+        const SizedBox(height: 10), // Tambahkan sedikit jarak
+
+        // 🔥 BAGIAN YANG DIUBAH MULAI DARI SINI
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            itemCount: filtered.length,
-            itemBuilder: (context, index) {
-              final friend = filtered[index];
-              return _FriendListItem(
-                friend: friend,
-                // 3. Gunakan variabel dari class ini, bukan 'vm'
-                currentUserLocation: currentUserLocation,
-              );
+          child: RefreshIndicator(
+            color: _kPrimaryColor, // Warna loading spinner
+            backgroundColor: Colors.white,
+            onRefresh: () async {
+              // Panggil fungsi refresh dari ViewModel
+              await context.read<HomeViewModel>().refreshData();
             },
+            child: ListView.builder(
+              // Penting: Agar bisa ditarik walau item sedikit
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              itemCount: filtered.length,
+              itemBuilder: (context, index) {
+                final friend = filtered[index];
+                return _FriendListItem(
+                  friend: friend,
+                  currentUserLocation: currentUserLocation,
+                );
+              },
+            ),
           ),
         ),
+        // 🔥 AKHIR BAGIAN YANG DIUBAH
       ],
     );
   }
@@ -600,51 +659,72 @@ class _CreateGroupPanel extends StatelessWidget {
 }
 
 class _EmptyFriendListPlaceholder extends StatelessWidget {
-  const _EmptyFriendListPlaceholder();
+  const _EmptyFriendListPlaceholder({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(32.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.people_alt_outlined,
-              color: _kPrimaryColor, size: 50),
-          const SizedBox(height: 16),
-          const Text(
-            "Grup Anda belum memiliki teman.",
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.black87, fontSize: 16),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            "Tambahkan teman ke grup ini untuk mulai berbagi lokasi.",
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.black54, fontSize: 14),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 50,
-            width: 200,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const FriendsPage()),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _kPrimaryColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(100),
+    // 🔥 BAGIAN YANG DIUBAH: Bungkus dengan RefreshIndicator & ScrollView
+    return RefreshIndicator(
+      color: _kPrimaryColor,
+      onRefresh: () async {
+        await context.read<HomeViewModel>().refreshData();
+      },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight, // Agar bisa ditarik penuh
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.people_alt_outlined,
+                        color: _kPrimaryColor, size: 50),
+                    const SizedBox(height: 16),
+                    const Text(
+                      "Grup Anda belum memiliki teman.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.black87, fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Tambahkan teman ke grup ini untuk mulai berbagi lokasi.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.black54, fontSize: 14),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      height: 50,
+                      width: 200,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const FriendsPage()),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _kPrimaryColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(100),
+                          ),
+                        ),
+                        child: const Text('Add Friends',
+                            style:
+                                TextStyle(color: Colors.white, fontSize: 18)),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              child: const Text('Add Friends',
-                  style: TextStyle(color: Colors.white, fontSize: 18)),
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -1001,8 +1081,15 @@ class _LocationSharingButton extends StatelessWidget {
   final HomeViewModel vm;
   const _LocationSharingButton({required this.vm});
 
+  // Warna tema (Diasumsikan _kPrimaryColor didefinisikan di tempat lain)
+  static const Color _kPrimaryColor = Color(0xFFFA8B60);
+  static const String fontName = 'Poppins'; // Agar konsisten
+
   @override
   Widget build(BuildContext context) {
+    // Note: Karena Anda menggunakan Consumer/Selector di level atas,
+    // state vm.isUserSharingLocation akan diperbarui saat toggle dipanggil.
+
     return FloatingActionButton(
       heroTag: "btn-share-location",
       backgroundColor:
@@ -1010,13 +1097,26 @@ class _LocationSharingButton extends StatelessWidget {
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       onPressed: () {
-        vm.toggleLocationSharing(!vm.isUserSharingLocation);
+        // Simpan status sebelum toggle dipanggil
+        final bool willBeSharing = !vm.isUserSharingLocation;
+
+        // Panggil fungsi toggleLocationSharing versi lama (tanpa context)
+        // Note: Asumsi fungsi ini hanya mengubah status dan mengirim data ke server
+        vm.toggleLocationSharing(willBeSharing);
+
+        // Notifikasi visual (Snackbar) ditampilkan di sini, di lapisan UI.
+        // Kita menggunakan nilai yang akan datang (willBeSharing) untuk menentukan pesan dan warna.
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(vm.isUserSharingLocation
-                ? '📍 Location sharing activated'
-                : '🚫 Location sharing stopped'),
+            content: Text(
+              willBeSharing
+                  ? 'Berbagi lokasi diaktifkan.'
+                  : 'Berbagi lokasi dihentikan.',
+              style: const TextStyle(fontFamily: fontName),
+            ),
+            backgroundColor: willBeSharing ? Colors.green : Colors.red,
             duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
           ),
         );
       },
