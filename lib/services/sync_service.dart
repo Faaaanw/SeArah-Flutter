@@ -1,6 +1,5 @@
 import 'package:searah_backend/models/user_locations_model.dart';
 import 'package:searah_backend/services/api_services.dart';
-import 'package:sqflite/sqflite.dart';
 import '../database/app_database.dart';
 
 class SyncService {

@@ -2,39 +2,43 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_services.dart';
 import '../viewmodel/home_viewmodel.dart';
-// Import model Group
-import '../models/group_model.dart'; 
+import '../models/group_model.dart';
 
 const Color _kPrimaryButtonColor = Color(0xFFFA8B60);
-const Color _kPeachIconColor = Color(0xFFBFA4A0);
 
 class CreateGroupPage extends StatefulWidget {
-const CreateGroupPage({super.key});
+  const CreateGroupPage({super.key});
 
-@override
-State<CreateGroupPage> createState() => _CreateGroupPageState();
+  @override
+  State<CreateGroupPage> createState() => _CreateGroupPageState();
 }
 
 class _CreateGroupPageState extends State<CreateGroupPage> {
-final _formKey = GlobalKey<FormState>();
-final TextEditingController _nameController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
-  final List<int> _selectedFriends = [];
+
+  // Set untuk menyimpan ID teman agar tidak duplikat dan pencarian lebih cepat
+  final Set<int> _selectedFriends = {};
   bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
-    // 1. Hapus pemanggilan Future.microtask ganda
+    // Fetch data terbaru saat halaman dibuka
     Future.microtask(() {
-      final vm = context.read<HomeViewModel>();
-      vm.fetchFriends(); // Cukup panggil sekali
+      context.read<HomeViewModel>().fetchFriends();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<HomeViewModel>();
+
+    // 🔥 PENTING: Gunakan allFriends, bukan friends
+    // friends = list yang terfilter berdasarkan grup yang aktif
+    // allFriends = list total semua teman
+    final friendList = vm.allFriends;
 
     return Scaffold(
       appBar: AppBar(
@@ -62,22 +66,27 @@ final TextEditingController _nameController = TextEditingController();
               const SizedBox(height: 24),
               const Text("Undang Teman",
                   style: TextStyle(fontWeight: FontWeight.bold)),
+
+              const SizedBox(height: 8), // Sedikit jarak
+
               Expanded(
                 child: vm.isLoadingFriends
                     ? const Center(child: CircularProgressIndicator())
-                    : vm.friends.isEmpty
+                    : friendList.isEmpty // 🔥 Cek friendList (allFriends)
                         ? const Center(
-                            child: Text("Belum ada teman untuk diundang"))
+                            child: Text("Anda belum memiliki teman."))
                         : ListView.builder(
-                            itemCount: vm.friends.length,
+                            itemCount: friendList.length,
                             itemBuilder: (context, index) {
-                              final friend = vm.friends[index];
+                              final friend = friendList[index];
                               final selected =
                                   _selectedFriends.contains(friend.id);
+
                               return CheckboxListTile(
                                 value: selected,
                                 title: Text(friend.name),
                                 subtitle: Text(friend.email),
+                                activeColor: _kPrimaryButtonColor,
                                 onChanged: (value) {
                                   setState(() {
                                     if (value == true) {
@@ -101,12 +110,12 @@ final TextEditingController _nameController = TextEditingController();
                           height: 20,
                           width: 20,
                           child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
+                              color: Colors.white, strokeWidth: 2),
                         )
                       : const Icon(Icons.group_add_outlined),
-                  label: const Text("Buat Grup dan Undang"),
+                  label: const Text("Buat Grup",
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   onPressed: _isSubmitting
                       ? null
                       : () async {
@@ -116,6 +125,7 @@ final TextEditingController _nameController = TextEditingController();
                         },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _kPrimaryButtonColor,
+                    foregroundColor: Colors.white, // Agar text & icon putih
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(100),
                     ),
@@ -128,7 +138,7 @@ final TextEditingController _nameController = TextEditingController();
       ),
     );
   }
-  
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -137,30 +147,20 @@ final TextEditingController _nameController = TextEditingController();
   }
 
   Future<void> _createGroup(HomeViewModel vm) async {
-    if (vm.authToken == null) {
-      // Cek authToken saja cukup karena dibutuhkan untuk API
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Token otentikasi belum tersedia.')),
-        );
-      }
-      return;
-    }
+    if (vm.authToken == null) return;
 
     setState(() => _isSubmitting = true);
 
     try {
-      // Panggilan API yang diperbarui
       final Group newGroup = await ApiService.createGroup(
         token: vm.authToken!,
         name: _nameController.text.trim(),
-        description: _descController.text.trim().isEmpty 
-          ? null 
-          : _descController.text.trim(),
-        memberIds: _selectedFriends,
+        description: _descController.text.trim().isEmpty
+            ? null
+            : _descController.text.trim(),
+        memberIds: _selectedFriends.toList(), // Konversi Set ke List
       );
 
-      // Tambahkan objek Group yang dikembalikan ke ViewModel
       vm.addGroup(newGroup);
 
       if (mounted) {
@@ -170,18 +170,17 @@ final TextEditingController _nameController = TextEditingController();
         Navigator.pop(context);
       }
     } catch (e) {
-      // Tangani error dengan lebih baik
-      String errorMessage = e.toString().contains('Exception:') 
-        ? e.toString().substring(e.toString().indexOf(':') + 1).trim()
-        : 'Terjadi kesalahan tidak terduga.';
-      
+      String errorMessage = e.toString().contains('Exception:')
+          ? e.toString().substring(e.toString().indexOf(':') + 1).trim()
+          : 'Terjadi kesalahan: $e';
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Gagal membuat grup: $errorMessage')),
+          SnackBar(content: Text('❌ $errorMessage')),
         );
       }
     } finally {
-      setState(() => _isSubmitting = false);
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 }

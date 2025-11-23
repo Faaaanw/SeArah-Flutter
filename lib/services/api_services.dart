@@ -7,7 +7,7 @@ import 'package:geolocator/geolocator.dart';
 
 class ApiService {
   //api route
-  static const String baseUrl = "http://192.168.1.7:8003/api";
+  static const String baseUrl = "http://192.168.1.18:8003/api";
 
   //  LOGIN MANUAL
   static Future<Map<String, dynamic>> login(
@@ -277,62 +277,6 @@ class ApiService {
     // Jika berhasil (status 200), tidak ada data yang dikembalikan (void)
   }
 
-  static Future<Event> createEvent({
-    required String token,
-    required int groupId,
-    required String title,
-    String? description,
-    String? locationName,
-    required double lat,
-    required double lng,
-    required DateTime startTime,
-  }) async {
-    final eventData = {
-      'title': title,
-      'description': description,
-      'location_name': locationName,
-      'location_latitude': lat,
-      'location_longitude': lng,
-      'start_time': startTime
-          .toIso8601String()
-          .substring(0, 19)
-          .replaceFirst('T', ' '), // Format Laravel: Y-m-d H:i:s
-    };
-
-    final response = await http.post(
-      Uri.parse('$baseUrl/groups/$groupId/events'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json'
-      },
-      body: jsonEncode(eventData),
-    );
-
-    if (response.statusCode == 201) {
-      return Event.fromJson(jsonDecode(response.body)['event']);
-    } else {
-      // Tangani error validasi atau 403
-      throw Exception(
-          jsonDecode(response.body)['message'] ?? 'Gagal membuat event.');
-    }
-  }
-
-// 2. 🔍 Ambil Semua Event Grup dari Server
-  static Future<List<Event>> getGroupEvents(int groupId, String token) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/groups/$groupId/events'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-
-    if (response.statusCode == 200) {
-      List<dynamic> jsonList = jsonDecode(response.body);
-      return jsonList.map((json) => Event.fromJson(json)).toList();
-    } else {
-      throw Exception(
-          'Gagal mengambil event grup: ${jsonDecode(response.body)['message'] ?? 'Error server.'}');
-    }
-  }
-
   // 🌐 GET Request Umum (bisa digunakan untuk endpoint seperti /search-user)
   static Future<Map<String, dynamic>> getRequest(
       String endpoint, String token) async {
@@ -476,6 +420,109 @@ class ApiService {
       }).toList();
     } else {
       throw Exception('Gagal ambil anggota grup: ${res.body}');
+    }
+  }
+
+  static Future<Event> createEvent({
+    required String token,
+    required int groupId,
+    required String title,
+    String? description,
+    String? locationName,
+    required double lat,
+    required double lng,
+    required DateTime startTime,
+    required DateTime endTime, // 🆕
+  }) async {
+    final eventData = {
+      'group_id': groupId,
+      'title': title,
+      'description': description,
+      'location_name': locationName,
+      'location_latitude': lat,
+      'location_longitude': lng,
+      'start_time':
+          startTime.toIso8601String().substring(0, 19).replaceFirst('T', ' '),
+      'end_time': endTime
+          .toIso8601String()
+          .substring(0, 19)
+          .replaceFirst('T', ' '), // 🆕
+    };
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/events'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json'
+      },
+      body: jsonEncode(eventData),
+    );
+
+    if (response.statusCode == 201) {
+      return Event.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception(
+          jsonDecode(response.body)['message'] ?? 'Gagal membuat event.');
+    }
+  }
+
+// 2. 🔍 Ambil Semua Event Grup dari Server
+  static Future<List<Event>> getGroupEvents(int groupId, String token) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/groups/$groupId/events'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+
+      final events = data['events'] as List;
+      return events.map((json) => Event.fromJson(json)).toList();
+    } else {
+      throw Exception(
+          'Gagal mengambil event grup: ${jsonDecode(response.body)['message'] ?? 'Error server.'}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getEventDistance({
+    required int eventId,
+    required String token,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/events/$eventId/distance'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Gagal menghitung jarak: ${response.body}');
+    }
+  }
+
+  static Future<String> joinEvent(int eventId, String token) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/events/$eventId/join'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body)['message'];
+    } else {
+      throw Exception(jsonDecode(response.body)['message']);
+    }
+  }
+
+  static Future<String> leaveEvent(int eventId, String token) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/events/$eventId/leave'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body)['message'];
+    } else {
+      throw Exception(jsonDecode(response.body)['message']);
     }
   }
 }

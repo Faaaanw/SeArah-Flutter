@@ -1,19 +1,37 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:searah_backend/models/event_model.dart';
 import '../services/api_services.dart';
 import '../models/friend_model.dart';
 import '../models/group_model.dart';
 import 'package:latlong2/latlong.dart';
-// import 'package:http/http.dart' as http; // Tidak digunakan di sini
+import 'package:http/http.dart' as http;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 
 class HomeViewModel extends ChangeNotifier {
   // ====== State Utama ======
-  List<Friend> _allFriends = []; // simpan semua teman
-  List<Friend> _friends = []; // yang difilter, untuk UI
+  List<Friend> _allFriends = [];
+  List<Friend> _friends = [];
   List<Group> _groups = [];
+  List<Event> get events => _events;
+
+  List<Event> _events = [];
+  LatLng? selectedEventLocation;
+  Event? activeEvent;
+  List<Friend> eventMembers = [];
+  Event? _currentEvent;
+  Event? get currentEvent => _currentEvent;
+
+  void setCurrentEvent(Event? event) {
+    _currentEvent = event;
+    safeNotifyListeners();
+  }
+
+  bool _isEventLoading = false;
+  bool get isEventLoading => _isEventLoading;
+
   bool _isLoadingGroups = false;
   String? _currentUserName;
   String? _currentUserEmail;
@@ -30,9 +48,9 @@ class HomeViewModel extends ChangeNotifier {
   // 🆕 State Lokasi Pengguna & Stream Subscription
   LatLng _userLocation = LatLng(-6.8208, 107.1396); // Default
   StreamSubscription<Position>? _positionSubscription;
-  // ⬇️ Tambahkan di sini
-  Timer? _debounceSendLocation; // 🕒 untuk delay kirim lokasi ke server
-  LatLng? _searchResultLocation; // 📍 pisahkan lokasi hasil pencarian
+  Timer? _debounceSendLocation;
+  LatLng? _searchResultLocation;
+  Timer? _friendUpdateTimer;
 
   final MapController mapController = MapController();
   final TextEditingController searchController = TextEditingController();
@@ -46,6 +64,7 @@ class HomeViewModel extends ChangeNotifier {
 
   // ====== Getter ======
   List<Friend> get friends => _friends;
+  List<Friend> get allFriends => _allFriends;
   List<Friend> get friendsForMap => _friends
       .where((f) =>
           f.isSharingLocation && f.latitude != null && f.longitude != null)
@@ -64,7 +83,6 @@ class HomeViewModel extends ChangeNotifier {
 
   LatLng get userLocation => _userLocation;
   LatLng get mapCenter => _userLocation;
-// ⬇️ Tambahkan di sini
   LatLng get searchResultLocation => _searchResultLocation ?? _userLocation;
 
   // ====== Lifecycle Safety ======
@@ -76,7 +94,11 @@ class HomeViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _positionSubscription?.cancel(); // 🔄 Hentikan stream
+    _positionSubscription?.cancel();
+    _friendUpdateTimer?.cancel();
+    _debounceSendLocation?.cancel();
+    _debounceSearch?.cancel();
+    searchController.dispose();
     super.dispose();
   }
 
@@ -97,25 +119,27 @@ class HomeViewModel extends ChangeNotifier {
     _isUserSharingLocation = true;
     isLoadingFriends = false;
     _isLoadingGroups = false;
-    _positionSubscription?.cancel(); // Pastikan stream berhenti saat logout
+    _positionSubscription?.cancel();
+    _friendUpdateTimer?.cancel();
     safeNotifyListeners();
   }
 
-// Saat user pilih grup
-  void setCurrentGroup(int? groupId) async {
+  // Saat user pilih grup
+  Future<void> setCurrentGroup(int? groupId) async {
     _currentGroupId = groupId;
 
     if (groupId == null) {
-      // All groups
       _friends = List.from(_allFriends);
+      _events = [];
       safeNotifyListeners();
-    } else {
-      // Ambil teman dari backend sesuai grup
-      await fetchFriendsByGroup(groupId);
+      return;
     }
+
+    await fetchFriendsByGroup(groupId);
+    await fetchEvents(groupId);
   }
 
-// Ambil teman dari backend per grup
+  // Ambil teman dari backend per grup
   Future<void> fetchFriendsByGroup(int groupId) async {
     if (_authToken == null) return;
 
@@ -126,12 +150,11 @@ class HomeViewModel extends ChangeNotifier {
       final friendsInGroup = await ApiService.getFriendsByGroup(
           groupId: groupId, token: _authToken!);
 
-      // Update cache _allFriends supaya pindah ke "All Groups" tetap ada
       _allFriends.removeWhere((f) => f.groupId == groupId);
       _allFriends.addAll(friendsInGroup);
 
       _friends = friendsInGroup;
-      await fetchFriendLocations(_authToken!); // optional, ambil lokasi teman
+      await fetchFriendLocations(_authToken!);
     } catch (e) {
       debugPrint('Gagal mengambil teman per grup: $e');
       _friends = [];
@@ -158,7 +181,6 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> loadInitialData() async {
     await fetchFriendLocations(_authToken!);
 
-// Reset lokasi user jika sharing dimatikan
     if (!_isUserSharingLocation) {
       _userLocation = LatLng(0, 0);
       safeNotifyListeners();
@@ -168,16 +190,18 @@ class HomeViewModel extends ChangeNotifier {
       debugPrint('❌ Error: Token atau userId belum diatur.');
       return;
     }
+    if (_currentGroupId != null) {
+      await fetchEvents(_currentGroupId!);
+    }
 
     _isLoading = true;
     safeNotifyListeners();
 
     try {
-      // Muat data grup, teman, dan lokasi pengguna saat ini secara paralel
       await Future.wait([
         fetchFriends(),
         fetchGroups(),
-        _getCurrentUserPositionOnce(), // 🔄 Ambil lokasi GPS di awal, hanya sekali
+        _getCurrentUserPositionOnce(), // 🔄 Ambil lokasi GPS di awal
       ]);
 
       if (_friends.isNotEmpty) {
@@ -192,82 +216,117 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   // ----------------------------------------------------
-  // 🔄 FUNGSI LOKASI REALTIME (Diubah menjadi Stream)
+  // 🔄 FUNGSI LOKASI REALTIME (🔥 UPDATED FIX ERROR)
   // ----------------------------------------------------
 
-  // 🆕 Fungsi untuk mengambil posisi awal (sekali saja)
+  /// 🔥 FIX: Helper function untuk mengecek izin & service SECARA AMAN
+  /// Ini mencegah error "Object is not subtype of Position" di Web
+  Future<Position> _safeDeterminePosition() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    // 1. Cek Service
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      return Future.error('Location services are disabled.');
+    }
+
+    // 2. Cek Permission
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        return Future.error('Location permissions are denied');
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      return Future.error(
+          'Location permissions are permanently denied, we cannot request permissions.');
+    }
+
+    // 3. Ambil Posisi
+    return await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+  }
+
+  /// 🔥 FIX: Menggunakan _safeDeterminePosition
   Future<void> _getCurrentUserPositionOnce() async {
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        debugPrint('Layanan lokasi dinonaktifkan.');
-        return;
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied ||
-            permission == LocationPermission.deniedForever) {
-          debugPrint('Izin lokasi ditolak. Menggunakan lokasi default.');
-          return;
-        }
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+      // Panggil fungsi aman yang kita buat di atas
+      final position = await _safeDeterminePosition();
 
       _userLocation = LatLng(position.latitude, position.longitude);
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        mapController.move(_userLocation, 13.0);
+        // Cek mapController agar tidak error jika belum siap
+        try {
+          mapController.move(_userLocation, 13.0);
+        } catch (e) {
+          debugPrint("Map controller belum siap: $e");
+        }
       });
       safeNotifyListeners();
     } catch (e) {
-      debugPrint('Gagal mendapatkan lokasi saat ini (sekali): $e');
+      // Tangani jika error, jangan crash
+      debugPrint('⚠️ Gagal mendapatkan lokasi (sekali): $e');
+      // Opsional: Set lokasi default jika gagal total
+      // _userLocation = LatLng(-6.8208, 107.1396);
     }
   }
 
   /**
-   * 🔄 Memulai stream untuk pembaruan lokasi yang cepat dan akurat.
+   * 🔄 Memulai stream untuk pembaruan lokasi.
    */
-  void startLocationUpdates() {
+  /**
+   * 🔄 Memulai stream untuk pembaruan lokasi.
+   * 🔥 FIX: Menggunakan pendekatan defensive programming untuk Web
+   */
+  void startLocationUpdates() async {
     if (_currentUserId == null || _authToken == null) return;
+
+    // 1. Cek izin dulu
+    try {
+      await _safeDeterminePosition();
+    } catch (e) {
+      debugPrint("⚠️ Tidak bisa memulai stream lokasi karena izin/service: $e");
+      return;
+    }
 
     _positionSubscription?.cancel();
 
-    // Konfigurasi Akurasi dan Filter Jarak
+    // 2. 🔥 FIX: Gunakan 'high' bukan 'bestForNavigation' untuk stabilitas Web
     const LocationSettings locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.bestForNavigation, // Akurasi tertinggi
-      distanceFilter: 10, // Update hanya jika bergerak 10 meter
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 10,
     );
 
-    // ⬇️ Ganti bagian ini
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: locationSettings,
-    )
-        .distinct((p1, p2) =>
-            p1.latitude == p2.latitude && p1.longitude == p2.longitude)
-        .listen((Position position) {
-      _userLocation = LatLng(position.latitude, position.longitude);
-      safeNotifyListeners();
+    ).handleError((error) {
+      debugPrint("⚠️ Error pada Stream Lokasi: $error");
+    })
+        // .distinct() // ⚠️ FIX: Distinct dimatikan dulu untuk mencegah error perbandingan tipe data object
 
-      // Kirim posisi baru ke server jika sharing aktif
-      if (_isUserSharingLocation) {
-        _sendLocationToServerDebounced(position.latitude, position.longitude);
+        // 3. 🔥 FIX: Terima sebagai 'dynamic' dulu, jangan langsung 'Position'
+        .listen((dynamic position) {
+      // Cek apakah data benar-benar Position
+      if (position is Position) {
+        _userLocation = LatLng(position.latitude, position.longitude);
+        safeNotifyListeners();
+
+        if (_isUserSharingLocation) {
+          _sendLocationToServerDebounced(position.latitude, position.longitude);
+        }
+      } else {
+        debugPrint("⚠️ Stream menerima data bukan Position: $position");
       }
-
-      // Refresh lokasi teman (diambil setiap kali lokasi user diupdate/dikirim)
-    }, onError: (error) {
-      debugPrint('Error pada Location Stream: $error');
     });
 
-    debugPrint('Location stream started (Distance Filter: 10m).');
+    debugPrint('✅ Location stream started safely (Web compatible).');
   }
 
-  /**
-   * 🆕 Fungsi terpisah untuk mengirim ke server.
-   */
   Future<void> _sendLocationToServer(double lat, double lon,
       {bool isSharing = true}) async {
     if (_currentUserId == null || _authToken == null) return;
@@ -281,7 +340,6 @@ class HomeViewModel extends ChangeNotifier {
     );
   }
 
-// ⬇️ Tambahkan di sini
   void _sendLocationToServerDebounced(double lat, double lon) {
     _debounceSendLocation?.cancel();
     _debounceSendLocation = Timer(const Duration(seconds: 5), () {
@@ -289,38 +347,53 @@ class HomeViewModel extends ChangeNotifier {
     });
   }
 
-  /**
-   * 🔄 Menghentikan stream pembaruan lokasi (Mengganti stopLocationUpdates lama).
-   */
   void stopLocationUpdates() {
     _positionSubscription?.cancel();
     _positionSubscription = null;
     debugPrint('Location updates stopped.');
   }
 
-  // ❌ _updateLocationAndRefresh dihapus karena fungsinya diambil alih oleh Stream
-
-  void toggleLocationSharing(bool value) {
+  void toggleLocationSharing(bool value) async {
     _isUserSharingLocation = value;
 
-    // Jika dimatikan, hapus lokasi user di server
     if (!value) {
-      _userLocation = LatLng(0, 0); // atau bisa null, sesuaikan
-      _sendLocationToServer(0, 0, isSharing: false);
-    } else {
-      _sendLocationToServer(
+      // MATIKAN SHARING
+      await _sendLocationToServer(
         _userLocation.latitude,
         _userLocation.longitude,
-        isSharing: true,
+        isSharing: false,
       );
-    }
+      debugPrint("🚫 Sharing dimatikan");
+    } else {
+      // HIDUPKAN SHARING
+      // 🔥 FIX: Gunakan safe determine position di sini juga
+      try {
+        final pos = await _safeDeterminePosition();
+        _userLocation = LatLng(pos.latitude, pos.longitude);
 
+        startLocationUpdates(); // Mulai stream lagi
+
+        await _sendLocationToServer(
+          pos.latitude,
+          pos.longitude,
+          isSharing: true,
+        );
+
+        mapController.move(_userLocation, 15.0);
+        debugPrint("📍 Sharing dihidupkan");
+      } catch (e) {
+        debugPrint("⚠️ Gagal mengaktifkan sharing: $e");
+        // Kembalikan toggle switch ke off jika gagal
+        _isUserSharingLocation = false;
+      }
+    }
     safeNotifyListeners();
   }
 
-  // (Fungsi-fungsi lain: fetchFriends, fetchFriendLocations, fetchGroups, addGroup, searchLocation, dll., tetap sama)
-  // ...
+  // ... (Sisa kode ke bawah SAMA PERSIS, tidak ada perubahan)
+  // fetchFriends, fetchFriendLocations, searchLocation, dll...
 
+  // ====== Fetch Friends ======
   // ====== Fetch Friends ======
   Future<void> fetchFriends() async {
     if (_authToken == null) return;
@@ -332,12 +405,14 @@ class HomeViewModel extends ChangeNotifier {
       final friendData = await ApiService.getFriends(_authToken!);
       _allFriends = friendData
           .map((json) => Friend.fromJson(json))
-          .where(
-              (f) => f.id != _currentUserId) // Hanya teman, bukan user sendiri
+          .where((f) => f.id != _currentUserId)
           .toList();
 
-      // Tampilkan sesuai currentGroupId
       filterFriendsByGroup(_currentGroupId);
+
+      // 🔥 TAMBAHKAN BARIS INI:
+      // Tempelkan kembali data lokasi yang tersimpan di cache ke object teman yang baru
+      updateFriendLocationsOnMap();
     } catch (e) {
       debugPrint('Gagal mengambil daftar teman: $e');
       _allFriends = [];
@@ -379,29 +454,6 @@ class HomeViewModel extends ChangeNotifier {
         }
       }
     }
-
-    // 🔹 Filter _friends agar hanya tampil yang sharing
-    // Jangan hapus teman dari list _friends, cukup update lokasi & status sharing
-    for (var friend in _friends) {
-      final loc = _friendLocations.firstWhere(
-        (f) => f['id'] == friend.id,
-        orElse: () => {},
-      );
-
-      if (loc.isNotEmpty) {
-        final isSharing = (loc['is_sharing'] ?? 1) == 1;
-        friend.isSharingLocation = isSharing;
-
-        if (isSharing) {
-          friend.latitude = _safeParseDouble(loc['latitude']);
-          friend.longitude = _safeParseDouble(loc['longitude']);
-        } else {
-          friend.latitude = null;
-          friend.longitude = null;
-        }
-      }
-    }
-
     safeNotifyListeners();
   }
 
@@ -413,13 +465,12 @@ class HomeViewModel extends ChangeNotifier {
     return null;
   }
 
-  // ====== Fetch Friend Locations ======
   Future<void> fetchFriendLocations(String token) async {
     if (_currentUserId == null) return;
     try {
       final res = await ApiService.getFriendLocations(_currentUserId!, token);
       _friendLocations = List<Map<String, dynamic>>.from(res);
-      updateFriendLocationsOnMap(); // ✅ sinkronisasi dan filter teman
+      updateFriendLocationsOnMap();
       debugPrint(
           '✅ Lokasi teman berhasil diambil (${_friendLocations.length})');
     } catch (e) {
@@ -427,10 +478,6 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
-  // ... (Sisa kode fetchGroups, addGroup, filterByGroup, searchLocation, fetchSearchSuggestions, clearSearchResults)
-  // ...
-
-  // ====== Fetch Groups ======
   Future<void> fetchGroups() async {
     if (_authToken == null) return;
 
@@ -439,6 +486,9 @@ class HomeViewModel extends ChangeNotifier {
 
     try {
       _groups = await ApiService.getUserGroups(_authToken!);
+      if (_currentGroupId == null && _groups.isNotEmpty) {
+        setCurrentGroup(_groups.first.id);
+      }
     } catch (e) {
       debugPrint('Gagal memuat grup: $e');
       _groups = [];
@@ -448,13 +498,11 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
-  // ====== Tambah Grup Baru ======
   void addGroup(Group newGroup) {
     _groups.insert(0, newGroup);
     safeNotifyListeners();
   }
 
-  // ====== Filter Grup (opsional) ======
   void filterByGroup(int groupId) {
     _friends = _friends.where((f) => f.groupId == groupId).toList();
     safeNotifyListeners();
@@ -467,7 +515,6 @@ class HomeViewModel extends ChangeNotifier {
     safeNotifyListeners();
 
     try {
-      // PAKAI CACHE DULU JIKA ADA
       List results;
       if (_searchCache.containsKey(query)) {
         results = _sortByDistance(_searchCache[query]!);
@@ -481,7 +528,7 @@ class HomeViewModel extends ChangeNotifier {
       }
 
       if (results.isNotEmpty) {
-        final loc = results.first; // hasil terdekat
+        final loc = results.first;
 
         final lat = double.tryParse(loc['lat'] ?? '0');
         final lon = double.tryParse(loc['lon'] ?? '0');
@@ -510,7 +557,6 @@ class HomeViewModel extends ChangeNotifier {
   List<dynamic> get searchResults => _searchResults;
   bool get isSearching => _isSearching;
 
-  // Fungsi baru untuk rekomendasi pencarian
   Future<void> fetchSearchSuggestions(String query) async {
     if (query.isEmpty) {
       _searchResults = [];
@@ -518,10 +564,8 @@ class HomeViewModel extends ChangeNotifier {
       return;
     }
 
-    // DEBOUNCE agar tidak spam API
     _debounceSearch?.cancel();
     _debounceSearch = Timer(const Duration(milliseconds: 400), () async {
-      // CEK CACHE
       if (_searchCache.containsKey(query)) {
         _searchResults = _sortByDistance(_searchCache[query]!);
         safeNotifyListeners();
@@ -538,10 +582,7 @@ class HomeViewModel extends ChangeNotifier {
           lon: _userLocation.longitude,
         );
 
-        // SIMPAN KE CACHE
         _searchCache[query] = results;
-
-        // SORT BERDASARKAN JARAK
         _searchResults = _sortByDistance(results);
       } catch (e) {
         debugPrint('Error fetchSearchSuggestions: $e');
@@ -558,19 +599,17 @@ class HomeViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ⬇️ Tambahkan di sini
   void clearSearch() {
     searchController.clear();
     _searchResults = [];
     _isSearching = false;
-
-    _searchMarker = null; // 🔥 Hapus marker pencarian
-
+    _searchMarker = null;
     safeNotifyListeners();
   }
 
   void startFriendLocationUpdates() {
-    Timer.periodic(const Duration(seconds: 15), (_) {
+    _friendUpdateTimer?.cancel();
+    _friendUpdateTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (_authToken != null) {
         fetchFriendLocations(_authToken!);
       }
@@ -601,20 +640,146 @@ class HomeViewModel extends ChangeNotifier {
             LatLng(_userLocation.latitude, _userLocation.longitude),
             LatLng(latB, lonB));
 
-        return dA.compareTo(dB); // urutkan ascending
+        return dA.compareTo(dB);
       });
   }
 
   void clearSearchField() {
-    searchController.clear(); // clear tulisan
-    clearSearchResults(); // hapus daftar hasil
-    clearSearchMarker(); // hapus marker di map
+    searchController.clear();
+    clearSearchResults();
+    clearSearchMarker();
     mapController.move(userLocation, 15.0);
-    safeNotifyListeners(); // update UI
+    safeNotifyListeners();
   }
 
   void clearSearchMarker() {
     _searchMarker = null;
     safeNotifyListeners();
+  }
+
+  Future<void> fetchGroupEvents(int groupId, String token) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final result = await ApiService.getGroupEvents(groupId, token);
+      _events = result;
+    } catch (e) {
+      print("Error fetch events: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchEvents(int groupId) async {
+    if (_authToken == null) {
+      debugPrint("❌ fetchEvents: authToken null, tidak bisa fetch events");
+      return;
+    }
+
+    _currentGroupId = groupId;
+    _isEventLoading = true;
+    safeNotifyListeners();
+
+    debugPrint("🔹 fetchEvents: Memulai fetch events untuk groupId=$groupId");
+
+    try {
+      final events = await ApiService.getGroupEvents(groupId, _authToken!);
+
+      debugPrint("🔹 fetchEvents: API returned ${events.length} event(s)");
+
+      for (var ev in events) {
+        debugPrint(
+            "   Event: id=${ev.id}, title=${ev.title}, lat=${ev.locationLatitude}, lng=${ev.locationLongitude}");
+      }
+
+      _events = events;
+
+      if (_events.isNotEmpty) {
+        _currentEvent = _events.first;
+        debugPrint(
+            "🔹 fetchEvents: currentEvent di-set ke id=${_currentEvent?.id}, title=${_currentEvent?.title}");
+      } else {
+        debugPrint("🔹 fetchEvents: tidak ada event di grup ini");
+      }
+    } catch (e) {
+      debugPrint("❌ fetchEvents: Gagal ambil event: $e");
+      _events = [];
+    } finally {
+      _isEventLoading = false;
+      safeNotifyListeners();
+    }
+  }
+
+  Future<Event> createEvent({
+    required int groupId,
+    required String title,
+    String? description,
+    required double latitude,
+    required double longitude,
+    String? locationName,
+    required DateTime startTime,
+    required DateTime endTime,
+  }) async {
+    if (_authToken == null) throw Exception("Token tidak ditemukan");
+
+    final event = await ApiService.createEvent(
+      token: _authToken!,
+      groupId: groupId,
+      title: title,
+      description: description,
+      locationName: locationName,
+      lat: latitude,
+      lng: longitude,
+      startTime: startTime,
+      endTime: endTime,
+    );
+
+    await fetchEvents(groupId);
+
+    return event;
+  }
+
+  Future<void> joinEvent(int eventId) async {
+    if (_authToken == null) return;
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final message = await ApiService.joinEvent(eventId, _authToken!);
+      debugPrint("Join Event: $message");
+
+      if (_currentGroupId != null) {
+        await fetchEvents(_currentGroupId!);
+      }
+    } catch (e) {
+      debugPrint("Gagal join event: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> leaveEvent(int eventId) async {
+    if (_authToken == null) return;
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final message = await ApiService.leaveEvent(eventId, _authToken!);
+      debugPrint("Leave Event: $message");
+
+      if (_currentGroupId != null) {
+        await fetchEvents(_currentGroupId!);
+      }
+    } catch (e) {
+      debugPrint("Gagal leave event: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 }

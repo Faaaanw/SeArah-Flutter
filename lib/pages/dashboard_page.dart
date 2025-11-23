@@ -1,19 +1,19 @@
-// File: lib/pages/home_page.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:searah_backend/pages/create_event_page.dart';
 import 'package:searah_backend/pages/create_group_page.dart';
+import 'package:searah_backend/pages/friends_page.dart';
 import '../viewmodel/home_viewmodel.dart';
 import '../models/friend_model.dart';
-// Import model Event (Diasumsikan ada)
 import '../models/event_model.dart';
-// Import model Group
-import '../models/group_model.dart';
 
-// Definisi Konstanta Warna (Sama dengan di LoginPage)
-const Color _kPrimaryButtonColor = Color(0xFFFA8B60);
-const Color _kPeachIconColor = Color(0xFFBFA4A0);
+// --- Konstanta Warna (Disesuaikan dengan Target Desain) ---
+const Color _kPrimaryColor = Color(0xFFFA8B60); // Orange Coral
+const Color _kBgCreamColor = Color(0xFFFFF6E5); // Krem Background Card Teman
+const Color _kTextColor = Color(0xFF5D4037); // Coklat Tua untuk Teks
+const Color _kGreyText = Color(0xFFA1887F); // Abu-abu kecoklatan
 
 class HomePageWidget extends StatelessWidget {
   const HomePageWidget({super.key});
@@ -24,81 +24,197 @@ class HomePageWidget extends StatelessWidget {
   }
 }
 
-class _HomeView extends StatelessWidget {
+class _HomeView extends StatefulWidget {
   const _HomeView();
+
+  @override
+  State<_HomeView> createState() => _HomeViewState();
+}
+
+class _HomeViewState extends State<_HomeView> {
+  late PageController _pageController;
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(viewportFraction: 1.0);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _goToPrevious() {
+    if (_currentIndex > 0) {
+      _currentIndex--;
+      _pageController.animateToPage(
+        _currentIndex,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  void _goToNext(int maxIndex) {
+    if (_currentIndex < maxIndex - 1) {
+      _currentIndex++;
+      _pageController.animateToPage(
+        _currentIndex,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<HomeViewModel>();
+    final now = DateTime.now();
+    // Urutkan event
+    final sortedEvents = List<Event>.from(vm.events)
+        .where((e) =>
+            e.endTime != null && e.endTime!.isAfter(now)) // 🔥 FILTER DISINI
+        .toList()
+      ..sort((a, b) => b.startTime!.compareTo(a.startTime!));
 
-    // --- LOGIKA KONDISI PANEL BAWAH ---
+    // Bottom panel logic
+    // Bottom panel logic
     Widget bottomPanelContent;
-    bool showBottomPanel = true;
 
-    if (vm.isLoading) {
+// 🔥 PERBAIKAN LOGIC UTAMA BOTTOM PANEL
+    if (vm.isLoading || vm.isEventLoading) {
       bottomPanelContent = const Center(child: CircularProgressIndicator());
     } else if (!vm.hasGroups) {
-      // 1. KONDISI: Belum punya grup sama sekali
+      // 1. Belum ada Grup: Tampilkan panel untuk buat grup
       bottomPanelContent = const _CreateGroupPanel();
+    } else if (vm.friends.isEmpty) {
+      // 2. Sudah ada Grup, tapi teman kosong: Tampilkan placeholder/tombol navigasi
+      // Anda harus memastikan widget _EmptyFriendListPlaceholder (atau yang setara)
+      // sudah Anda definisikan di luar _HomeView, seperti pada jawaban saya sebelumnya.
+      bottomPanelContent =
+          const _EmptyFriendListPlaceholder(); // <--- BARIS KRITIS
     } else {
-      // 2. KONDISI: Punya Grup (Lanjut ke Tampilan Peta)
-
-      // *** LOGIKA PENYUSUNAN FRIEND LIST PANEL ***
-      // NOTE: Logika ini HARUS disesuaikan nanti dengan state Event dan Current Group
+      // 3. Grup ada dan Teman ada: Tampilkan daftar teman di panel
       bottomPanelContent = _FriendListPanel(
         friends: vm.friends,
-        currentUserId: vm.currentUserId ?? 0, // FIX: ubah ke int non-null
-        currentEvent: null,
+        currentUserId: vm.currentUserId ?? 0,
+        currentUserLocation: vm.userLocation,
+        // currentEvent tidak perlu karena sudah tersedia melalui provider
+        // currentEvent: null,
       );
     }
-
-    // Untuk saat ini, kita selalu tampilkan panel sesuai desain
-    // Jika Anda ingin panel hilang saat tidak ada Event/Friend, ubah showBottomPanel.
+// Akhir dari PERBAIKAN LOGIC UTAMA BOTTOM PANEL
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          // 1. Map Layer (Layer Bawah)
+          // 1. Map Layer
           _buildMapLayer(context, vm, vm.friends),
 
-          // 2. Search & Group Filter Bar (Layer Atas, Floating)
+          // 2. Search & Filter
           _buildSearchAndFilter(context, vm),
 
-          // 3. Status/Friend List Panel (Layer Bawah, Sticky)
-          if (showBottomPanel) // Tampilkan panel jika kondisi memenuhi
+          // 3. Bottom Panel (Background Putih Melengkung)
+          if (vm.hasGroups && !vm.isLoading && !vm.isEventLoading)
             Align(
               alignment: Alignment.bottomCenter,
-              child: Container(
-                height: MediaQuery.of(context).size.height * 0.45,
+              child: AnimatedContainer(
+                // Gunakan AnimatedContainer agar transisi naik/turunnya halus
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+
+                // LOGIC 1: TINGGI PANEL
+                // Jika ada event: 0.4 (40% layar) - Lebih pendek
+                // Jika TIDAK ada event: 0.55 (55% layar) - Lebih tinggi/naik ke atas
+                height: MediaQuery.of(context).size.height *
+                    (vm.events.isNotEmpty ? 0.40 : 0.40),
+
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(30),
-                    topRight: Radius.circular(30),
+                    topLeft: Radius.circular(40),
+                    topRight: Radius.circular(40),
                   ),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black12, blurRadius: 10, spreadRadius: 5)
+                        color: Colors.black12,
+                        blurRadius: 15,
+                        offset: Offset(0, -5))
                   ],
                 ),
-                child: bottomPanelContent,
+                child: Padding(
+                  // LOGIC 2: PADDING ATAS LIST TEMAN
+                  // Jika ada event: 60.0 (Supaya list tidak ketutup Event Card yang melayang)
+                  // Jika TIDAK ada event: 25.0 (Padding normal/standar)
+                  padding:
+                      EdgeInsets.only(top: vm.events.isNotEmpty ? 60.0 : 25.0),
+                  child: bottomPanelContent,
+                ),
               ),
             ),
 
-          // 4. Floating Event Card (Sesuai Screenshot)
-          if (vm.hasGroups &&
-              !vm.isLoading) // Tampilkan di atas panel, jika ada grup
+          // 4. Event Card Carousel (Posisi Floating)
+          // Hanya muncul jika events TIDAK kosong
+          if (vm.hasGroups && vm.events.isNotEmpty)
             Positioned(
-              left: 20,
-              right: 20,
-              bottom: MediaQuery.of(context).size.height * 0.45 -
-                  20, // Posisi di atas panel
-              child: const _EventCard(
-                event: null, // TODO: Isi dengan Event aktual
+              left: 0,
+              right: 0,
+              // Posisi tetap di perbatasan panel 0.40
+              bottom: (MediaQuery.of(context).size.height * 0.40) - 50,
+              child: SizedBox(
+                height: 100,
+                child: PageView.builder(
+                  controller: _pageController,
+                  itemCount: sortedEvents.length,
+                  onPageChanged: (index) {
+                    setState(() => _currentIndex = index);
+                    vm.setCurrentEvent(sortedEvents[index]);
+                  },
+                  itemBuilder: (context, index) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: _EventCard(
+                        userLocation: vm.userLocation,
+                        event: sortedEvents[index],
+                      ),
+                    );
+                  },
+                  physics: const ClampingScrollPhysics(),
+                ),
               ),
             ),
+
+          // Tombol Navigasi Kiri Kanan (Hanya jika ada event)
+          if (vm.hasGroups && vm.events.isNotEmpty) ...[
+            // ... (Kode tombol chevron kiri/kanan tetap sama)
+            Positioned(
+              left: 10,
+              bottom: (MediaQuery.of(context).size.height * 0.40) -
+                  20, // Sesuaikan posisi tombol juga jika perlu
+              child: IconButton(
+                icon: const Icon(Icons.chevron_left,
+                    color: Colors.white, size: 30),
+                onPressed: _goToPrevious,
+              ),
+            ),
+            Positioned(
+              right: 10,
+              bottom: (MediaQuery.of(context).size.height * 0.40) - 20,
+              child: IconButton(
+                icon: const Icon(Icons.chevron_right,
+                    color: Colors.white, size: 30),
+                onPressed: () => _goToNext(vm.events.length),
+              ),
+            ),
+          ],
+
+          // 5. Location Button
           Positioned(
-            bottom: MediaQuery.of(context).size.height * 0.45 + 20,
+            bottom: 20,
             right: 20,
             child: _LocationSharingButton(vm: vm),
           ),
@@ -106,248 +222,324 @@ class _HomeView extends StatelessWidget {
       ),
     );
   }
+}
 
-  // ... _buildMapLayer tetap sama ...
-  Widget _buildMapLayer(
-    BuildContext context,
-    HomeViewModel vm,
-    List<Friend> friends,
-  ) {
-    final userLoc = vm.userLocation;
+// ... _buildMapLayer (Logic Tetap Sama) ...
+Widget _buildMapLayer(
+  BuildContext context,
+  HomeViewModel vm,
+  List<Friend> friends,
+) {
+  final userLoc = vm.userLocation;
 
-    return RepaintBoundary(
-      child: FlutterMap(
-        mapController: vm.mapController,
-        options: MapOptions(
-          initialCenter: vm.mapCenter,
-          initialZoom: 13.0,
-          interactionOptions: const InteractionOptions(
-            flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-          ),
+  return RepaintBoundary(
+    child: FlutterMap(
+      mapController: vm.mapController,
+      options: MapOptions(
+        initialCenter: vm.mapCenter,
+        initialZoom: 13.0,
+        interactionOptions: const InteractionOptions(
+          flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
         ),
-        children: [
-          TileLayer(
-            urlTemplate:
-                'https://api.maptiler.com/maps/streets/{z}/{x}/{y}.jpg?key=nkV8u6JfP6d8DPcFsYJe',
-            additionalOptions: {'key': 'nkV8u6JfP6d8DPcFsYJe'},
-            userAgentPackageName: 'com.searah.app',
-            tileDimension: 256,
-            minZoom: 2,
-            maxZoom: 18,
-            keepBuffer: 2,
-          ),
-          Consumer<HomeViewModel>(
-            builder: (context, vm, _) {
-              final friendMarkers = vm.friendsForMap
-                  .where((f) => f.id != vm.currentUserId)
-                  .map(
-                    (f) => Marker(
-                      point: LatLng(f.latitude!, f.longitude!),
-                      width: 60,
-                      height: 60,
-                      child: _FriendMapMarker(friend: f),
-                    ),
-                  )
-                  .toList();
-              final userMarker = Marker(
-                point: vm.userLocation,
-                width: 60,
-                height: 60,
-                child: const Icon(Icons.person_pin_circle,
-                    color: Colors.blue, size: 40),
-              );
+      ),
+      children: [
+        TileLayer(
+          urlTemplate:
+              'https://api.maptiler.com/maps/streets/{z}/{x}/{y}.jpg?key=nkV8u6JfP6d8DPcFsYJe',
+          additionalOptions: const {'key': 'nkV8u6JfP6d8DPcFsYJe'},
+          userAgentPackageName: 'com.searah.app',
+          tileDimension: 256,
+          minZoom: 2,
+          maxZoom: 18,
+          keepBuffer: 2,
+        ),
 
-              return MarkerLayer(
-                key: ValueKey(friendMarkers.length + 1),
-                markers: [
-                  // 🔴 Marker Teman
-                  ...friendMarkers,
+        /// MARKER LAYER
+        Consumer<HomeViewModel>(
+          builder: (context, vm, _) {
+            final friendMarkers = vm.friendsForMap
+                .where((f) => f.id != vm.currentUserId)
+                .map(
+                  (f) => Marker(
+                    point: LatLng(f.latitude!, f.longitude!),
+                    width: 60,
+                    height: 60,
+                    child: _FriendMapMarker(friend: f),
+                  ),
+                )
+                .toList();
 
-                  // 🔵 Marker Hasil Pencarian
-                  if (vm.searchMarker != null)
+            final userMarker = Marker(
+              point: vm.userLocation,
+              width: 60,
+              height: 60,
+              child: const Icon(Icons.person_pin_circle,
+                  color: _kPrimaryColor, size: 50),
+            );
+
+            // 🔵 Marker lokasi search (tetap tampil)
+            final searchMarkerWidget = vm.searchMarker == null
+                ? <Marker>[]
+                : [
                     Marker(
                       point: vm.searchMarker!,
                       width: 60,
                       height: 60,
                       child: const Icon(
                         Icons.location_on,
-                        color: Colors.blue, // 🔵 BEDA DARI USER
-                        size: 40,
+                        color:
+                            _kPrimaryColor, // Pertahankan warna ikon yang sudah ada
+                        size: 45,
+                      ),
+                    )
+                  ];
+
+            // 🔥 Marker popup "Add Event Here"
+            // HANYA TAMPIL JIKA searchMarker ADA DAN currentGroupId TIDAK NULL
+            final addEventPopup = (vm.searchMarker == null ||
+                    vm.currentGroupId == null)
+                ? <Marker>[]
+                : [
+                    Marker(
+                      // Posisikan di atas ikon lokasi (sedikit ke kiri atas)
+                      point: LatLng(
+                        vm.searchMarker!.latitude,
+                        vm.searchMarker!.longitude,
+                      ),
+                      width: 150,
+                      height: 60, // Tambah tinggi untuk padding
+                     
+                      child: Transform.translate(
+                        offset: const Offset(0, -50), // Naikkan posisi pop-up
+                        child: GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CreateEventPage(
+                                  latitude: vm.searchMarker!.latitude,
+                                  longitude: vm.searchMarker!.longitude,
+                                  locationName: vm.searchController.text,
+                                  groupId: vm.currentGroupId!,
+                                ),
+                              ),
+                            );
+                          },
+                          // Tampilan Pop-up yang diperbagus
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color:
+                                  _kPrimaryColor, // Ganti warna latar belakang ke warna utama
+                              borderRadius:
+                                  BorderRadius.circular(15), // Lebih membulat
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black38,
+                                  blurRadius: 4,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.add_location_alt,
+                                    color: Colors.white, size: 18),
+                                const SizedBox(width: 5),
+                                const Text(
+                                  "Add Event Here",
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
+                  ];
 
-                  // 🟢 Marker User
-                  userMarker,
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
+            return MarkerLayer(
+              markers: [
+                ...friendMarkers,
+                ...searchMarkerWidget, // Ikon lokasi pencarian
+                ...addEventPopup, // Pop-up di atas ikon lokasi
+                if (vm.isUserSharingLocation) userMarker,
+              ],
+            );
+          },
+        ),
+      ],
+    ),
+  );
+}
 
-  // ... _buildSearchAndFilter diubah untuk Group Dropdown ...
-  Widget _buildSearchAndFilter(BuildContext context, HomeViewModel vm) {
-    return Positioned(
-      top: 50,
-      left: 20,
-      right: 20,
-      child: Column(
-        children: [
-          Row(
-            children: [
-              // 🔸 Search bar
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black12, blurRadius: 8)
-                    ],
+// ... _buildSearchAndFilter (UI dipercantik sedikit) ...
+Widget _buildSearchAndFilter(BuildContext context, HomeViewModel vm) {
+  return Positioned(
+    top: 60, // Turunkan sedikit agar tidak kena notch/status bar
+    left: 24,
+    right: 24,
+    child: Column(
+      children: [
+        Row(
+          children: [
+            // 🔸 Search bar
+            Expanded(
+              child: Container(
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: const [
+                    BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 10,
+                        offset: Offset(0, 4))
+                  ],
+                ),
+                child: TextField(
+                  controller: vm.searchController,
+                  textAlignVertical: TextAlignVertical.center,
+                  decoration: InputDecoration(
+                    hintText: 'Search Location',
+                    hintStyle:
+                        TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                    border: InputBorder.none,
+                    prefixIcon: const Icon(Icons.search, color: _kPrimaryColor),
+                    suffixIcon: vm.searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear,
+                                color: Colors.grey, size: 20),
+                            onPressed: () {
+                              vm.clearSearchField();
+                            },
+                          )
+                        : null,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
                   ),
-                  child: TextField(
-                    controller: vm.searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Search Location',
-                      border: InputBorder.none,
-                      prefixIcon:
-                          const Icon(Icons.search, color: _kPeachIconColor),
-
-                      // 🔥 Tambahkan tombol CLEAR di sini
-                      suffixIcon: vm.searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, color: Colors.grey),
-                              onPressed: () {
-                                vm.clearSearchField(); // << fungsi di ViewModel
-                              },
-                            )
-                          : null,
-
-                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    onChanged: (query) {
-                      if (query.isEmpty) {
-                        vm.clearSearchField(); // sekarang clear marker dan results juga
-                        return;
-                      }
-
-                      if (query.length > 2) {
-                        vm.fetchSearchSuggestions(query);
-                      } else {
-                        vm.clearSearchResults();
-                      }
-                    },
-                    onSubmitted: (query) {
-                      FocusScope.of(context).unfocus();
-                      if (query.isEmpty) {
-                        vm.clearSearchField();
-                        return;
-                      }
-                      vm.searchLocation(query);
+                  onChanged: (query) {
+                    if (query.isEmpty) {
+                      vm.clearSearchField();
+                      return;
+                    }
+                    if (query.length > 2) {
+                      vm.fetchSearchSuggestions(query);
+                    } else {
                       vm.clearSearchResults();
-                    },
-                  ),
+                    }
+                  },
+                  onSubmitted: (query) {
+                    FocusScope.of(context).unfocus();
+                    if (query.isEmpty) {
+                      vm.clearSearchField();
+                      return;
+                    }
+                    vm.searchLocation(query);
+                    vm.clearSearchResults();
+                  },
                 ),
               ),
-              const SizedBox(width: 10),
-              // 🔸 Group button
-              _GroupDropdownButton(vm: vm),
-            ],
+            ),
+            const SizedBox(width: 12),
+            // 🔸 Group button
+            _GroupDropdownButton(vm: vm),
+          ],
+        ),
+
+        // 🔸 Loading bar
+        if (vm.isSearching)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: const LinearProgressIndicator(
+                minHeight: 2, color: _kPrimaryColor),
           ),
 
-          // 🔸 Loading bar
-          if (vm.isSearching) const LinearProgressIndicator(minHeight: 2),
-
-          // 🔸 Daftar hasil pencarian
-          if (vm.searchResults.isNotEmpty)
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black26, blurRadius: 5)
-                ],
-              ),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: vm.searchResults.length,
-                itemBuilder: (context, index) {
-                  final loc = vm.searchResults[index];
-                  final name = loc['display_name'] ?? 'Unknown';
-                  return ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.location_on,
-                        color: _kPeachIconColor, size: 18),
-                    title: Text(name, style: const TextStyle(fontSize: 13)),
-                    onTap: () {
-                      FocusScope.of(context).unfocus();
-
-                      final lat = double.tryParse(loc['lat'] ?? '0') ?? 0;
-                      final lon = double.tryParse(loc['lon'] ?? '0') ?? 0;
-
-                      vm.setSearchMarker(lat, lon);
-
-                      vm.searchController.text = name;
-                      vm.clearSearchResults();
-                    },
-                  );
-                },
-              ),
+        // 🔸 Daftar hasil pencarian
+        if (vm.searchResults.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(15),
+              boxShadow: const [
+                BoxShadow(color: Colors.black26, blurRadius: 5)
+              ],
             ),
-        ],
-      ),
-    );
-  }
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: vm.searchResults.length,
+              itemBuilder: (context, index) {
+                final loc = vm.searchResults[index];
+                final name = loc['display_name'] ?? 'Unknown';
+                return ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.location_on,
+                      color: _kPrimaryColor, size: 18),
+                  title: Text(name, style: const TextStyle(fontSize: 13)),
+                  onTap: () {
+                    FocusScope.of(context).unfocus();
+                    final lat = double.tryParse(loc['lat'] ?? '0') ?? 0;
+                    final lon = double.tryParse(loc['lon'] ?? '0') ?? 0;
+                    vm.setSearchMarker(lat, lon);
+                    vm.searchController.text = name;
+                    vm.clearSearchResults();
+                  },
+                );
+              },
+            ),
+          ),
+      ],
+    ),
+  );
 }
-// --- 3. Widget State Teman (Disesuaikan) ---
 
-// 3.1. State: Panel yang Tampil saat tidak ada Event
+// --- 3. Widget Panel Teman (Desain Baru) ---
+
 class _FriendListPanel extends StatelessWidget {
   final List<Friend> friends;
-  final Event? currentEvent;
   final int currentUserId;
+  final LatLng currentUserLocation; // 1. Tambahkan variabel ini
 
   const _FriendListPanel({
+    super.key,
     required this.friends,
     required this.currentUserId,
-    this.currentEvent,
+    required this.currentUserLocation, // 2. Tambahkan ke constructor
   });
 
   @override
   Widget build(BuildContext context) {
-    if (friends.isEmpty) {
-      return const _ConnectNowPanel();
-    }
+    final filtered = friends.where((f) => f.id != currentUserId).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(height: currentEvent != null ? 80 : 20),
         const Padding(
-          padding: EdgeInsets.only(left: 20.0, top: 8.0, bottom: 8.0),
+          padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: 10.0),
           child: Text(
             'Your Friend\'s',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: _kPrimaryColor,
+            ),
           ),
         ),
         Expanded(
-          child: Builder(
-            builder: (_) {
-              final filtered =
-                  friends.where((f) => f.id != currentUserId).toList();
-
-              return ListView.builder(
-                padding: EdgeInsets.zero,
-                itemCount: filtered.length,
-                itemBuilder: (context, index) {
-                  final friend = filtered[index];
-                  return _FriendListItem(friend: friend);
-                },
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            itemCount: filtered.length,
+            itemBuilder: (context, index) {
+              final friend = filtered[index];
+              return _FriendListItem(
+                friend: friend,
+                // 3. Gunakan variabel dari class ini, bukan 'vm'
+                currentUserLocation: currentUserLocation,
               );
             },
           ),
@@ -357,50 +549,6 @@ class _FriendListPanel extends StatelessWidget {
   }
 }
 
-// 3.1.1 State: Belum ada teman (Connect Now - tetap sama)
-class _ConnectNowPanel extends StatelessWidget {
-  const _ConnectNowPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    // ... (kode _ConnectNowPanel yang sama) ...
-    return Padding(
-      padding: const EdgeInsets.all(32.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text(
-            "You're not connected with your friend yet",
-            style: TextStyle(color: Colors.black54, fontSize: 16),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 50,
-            width: 200,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CreateGroupPage()),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _kPrimaryButtonColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(100),
-                ),
-              ),
-              child: const Text('Connect Now',
-                  style: TextStyle(color: Colors.white, fontSize: 18)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// 3.1.2 State: Belum ada grup (Create Group - diubah sedikit)
 class _CreateGroupPanel extends StatelessWidget {
   const _CreateGroupPanel();
 
@@ -411,8 +559,7 @@ class _CreateGroupPanel extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.group_add_outlined,
-              color: _kPeachIconColor, size: 60),
+          const Icon(Icons.group_add_outlined, color: _kPrimaryColor, size: 60),
           const SizedBox(height: 16),
           const Text(
             "Anda belum bergabung dalam grup mana pun.",
@@ -437,7 +584,7 @@ class _CreateGroupPanel extends StatelessWidget {
                 );
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: _kPrimaryButtonColor,
+                backgroundColor: _kPrimaryColor,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(100),
                 ),
@@ -452,119 +599,399 @@ class _CreateGroupPanel extends StatelessWidget {
   }
 }
 
-// --- 4. Widget Baru: Event Card dan Group Dropdown ---
-
-// 4.1 Event Card (Sesuai Gambar)
-class _EventCard extends StatelessWidget {
-  final Event? event; // Akan diisi data Event dari ViewModel
-  const _EventCard({this.event});
+class _EmptyFriendListPlaceholder extends StatelessWidget {
+  const _EmptyFriendListPlaceholder();
 
   @override
   Widget build(BuildContext context) {
-    // Jika event null, tampilkan placeholder/hidden card
-    if (event == null) return const SizedBox.shrink(); // Hide if no event
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _kPrimaryButtonColor.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.all(32.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Gambar Event (Placeholder)
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(15),
-              color: Colors.white, // Placeholder color
-              image: const DecorationImage(
-                image: AssetImage(
-                    'assets/images/event_placeholder.png'), // Ganti dengan path gambar Anda
-                fit: BoxFit.cover,
+          const Icon(Icons.people_alt_outlined,
+              color: _kPrimaryColor, size: 50),
+          const SizedBox(height: 16),
+          const Text(
+            "Grup Anda belum memiliki teman.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.black87, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            "Tambahkan teman ke grup ini untuk mulai berbagi lokasi.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.black54, fontSize: 14),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            height: 50,
+            width: 200,
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FriendsPage()),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _kPrimaryColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(100),
+                ),
               ),
+              child: const Text('Add Friends',
+                  style: TextStyle(color: Colors.white, fontSize: 18)),
             ),
           ),
-          const SizedBox(width: 16),
-          // Detail Event
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        ],
+      ),
+    );
+  }
+}
+
+// --- 4. Event Card & Friend List Item (Desain Baru) ---
+
+// 4.1 Event Card Modern (Oranye Penuh)
+class _EventCard extends StatelessWidget {
+  final Event? event;
+  final LatLng userLocation;
+  const _EventCard({super.key, this.event, required this.userLocation});
+
+  @override
+  Widget build(BuildContext context) {
+    if (event == null) return const SizedBox.shrink();
+
+    final Distance distanceCalc = const Distance();
+    final eventLatLng =
+        LatLng(event!.locationLatitude, event!.locationLongitude);
+    final double km = distanceCalc(userLocation, eventLatLng) / 1000;
+
+    // Helper format waktu & tanggal
+    String formatTime(DateTime? dt) => dt == null
+        ? "--:--"
+        : "${dt.hour.toString().padLeft(2, '0')}.${dt.minute.toString().padLeft(2, '0')}";
+    String formatDate(DateTime? dt) {
+      if (dt == null) return "--";
+      final months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec"
+      ];
+      return "${dt.day} ${months[dt.month - 1]} ${dt.year}";
+    }
+
+    return SizedBox(
+      height: 100, // Tinggi fix agar compact
+      child: Stack(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+            decoration: BoxDecoration(
+                color: _kPrimaryColor,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                      color: _kPrimaryColor.withOpacity(0.4),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4))
+                ],
+                gradient: const LinearGradient(
+                    colors: [Color(0xFFFA8B60), Color(0xFFF37140)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight)),
+            child: Row(
               children: [
-                Text(
-                  event?.title ?? 'Family Gathering', // Judul Event
-                  style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white),
+                // Gambar Kecil
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: 70,
+                    height: 70,
+                    color: Colors.white,
+                    child: Image.asset('assets/images/event_placeholder.png',
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) =>
+                            const Icon(Icons.image, color: Colors.grey)),
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_today,
-                        color: Colors.white70, size: 14),
-                    const SizedBox(width: 4),
-                    Text(
-                      '20 Oct 2025', // event?.startTime
-                      style:
-                          const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    const Icon(Icons.access_time,
-                        color: Colors.white70, size: 14),
-                    const SizedBox(width: 4),
-                    Text(
-                      '18.00 - 20.00', // Format waktu
-                      style:
-                          const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on,
-                        color: Colors.white70, size: 14),
-                    const SizedBox(width: 4),
-                    Text(
-                      event?.locationName ?? 'SMKN 1 Cianjur',
-                      style:
-                          const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ],
+                const SizedBox(width: 12),
+                // Info Text
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(
+                            right: 50.0), // Space untuk badge jarak
+                        child: Text(event?.title ?? 'Event',
+                            style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      const SizedBox(height: 4),
+                      _iconText(
+                          Icons.calendar_today, formatDate(event?.startTime)),
+                      _iconText(Icons.access_time,
+                          "${formatTime(event?.startTime)} - ${formatTime(event?.endTime)}"),
+                      _iconText(
+                          Icons.location_on, event?.locationName ?? "Location"),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-          // Jarak dan Partisipan (Placeholder)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Text('1.5Km ⬆️',
-                    style: TextStyle(color: Colors.white, fontSize: 10)),
-              ),
-              const SizedBox(height: 10),
-              // Avatar partisipan kecil (Sesuai gambar)
-              const Row(
-                children: [
-                  CircleAvatar(radius: 8, backgroundColor: Colors.yellow),
-                  CircleAvatar(radius: 8, backgroundColor: Colors.green),
-                ],
-              )
-            ],
+          // Badge Jarak
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                  color: Colors.white, borderRadius: BorderRadius.circular(12)),
+              child: Text("${km.toStringAsFixed(1)}Km",
+                  style: const TextStyle(
+                      color: _kPrimaryColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold)),
+            ),
           ),
+          // Tombol Join/Leave
+          Positioned(
+            bottom: 10,
+            right: 10,
+            child: Consumer<HomeViewModel>(builder: (context, vm, _) {
+              final joined = event!.isJoined;
+              return GestureDetector(
+                onTap: () => joined
+                    ? vm.leaveEvent(event!.id!)
+                    : vm.joinEvent(event!.id!),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.25),
+                      shape: BoxShape.circle),
+                  child: Icon(joined ? Icons.check : Icons.add,
+                      color: Colors.white, size: 18),
+                ),
+              );
+            }),
+          )
         ],
+      ),
+    );
+  }
+
+  Widget _iconText(IconData icon, String text) {
+    return Row(children: [
+      Icon(icon, color: Colors.white, size: 11),
+      const SizedBox(width: 4),
+      Expanded(
+          child: Text(text,
+              style: const TextStyle(color: Colors.white, fontSize: 11),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis))
+    ]);
+  }
+}
+
+// 3.2.1 Item Daftar Teman (Desain "Card" Modern)
+class _FriendListItem extends StatelessWidget {
+  final Friend friend;
+  final LatLng currentUserLocation; // Tambahkan parameter ini
+
+  const _FriendListItem({
+    required this.friend,
+    required this.currentUserLocation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 1. Cek Status Online/Offline berdasarkan data Model
+    // Syarat Online: isSharingLocation true DAN koordinat tidak null
+    final bool isOnline = friend.isSharingLocation &&
+        friend.latitude != null &&
+        friend.longitude != null;
+
+    // 2. Hitung Jarak Real (Hanya jika Online)
+    String distanceText = "-";
+    if (isOnline) {
+      final Distance distance = const Distance();
+      final double km = distance.as(
+        LengthUnit.Kilometer,
+        currentUserLocation,
+        LatLng(friend.latitude!, friend.longitude!),
+      );
+
+      // Format: Jika jarak < 1 km, tampilkan 0.x km, jika jauh tampilkan bulat
+      distanceText = km < 1
+          ? "${km.toStringAsFixed(2)} km" // Contoh: 0.25 km
+          : "${km.toStringAsFixed(1)} km"; // Contoh: 12.5 km
+    }
+
+    // 3. Tentukan Warna Status (Visual Difference)
+    final Color statusColor = isOnline ? Colors.green : Colors.grey;
+    final String statusText = isOnline ? "Online" : "Offline";
+
+    return Opacity(
+      // Jika offline, buat item sedikit transparan (Visual Difference 1)
+      opacity: isOnline ? 1.0 : 0.6,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _kBgCreamColor,
+          borderRadius: BorderRadius.circular(24),
+          border: isOnline
+              ? null
+              : Border.all(
+                  color: Colors.grey.shade300), // Border abu jika offline
+        ),
+        child: Row(
+          children: [
+            // --- AVATAR ---
+            Stack(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: Colors.white,
+                  child: CircleAvatar(
+                    radius: 22,
+                    backgroundColor: Colors.grey.shade300,
+                    // Di sini nanti bisa pakai NetworkImage jika ada URL foto di model
+                    backgroundImage: const AssetImage(
+                        'assets/images/avatar_placeholder.png'),
+                    child: const Icon(Icons.person, color: Colors.white),
+                  ),
+                ),
+                // Indikator Titik Status (Visual Difference 2)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    height: 14,
+                    width: 14,
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 16),
+
+            // --- INFO NAMA & STATUS ---
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    friend.name,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      // Jika offline, warna teks nama jadi abu-abu
+                      color: isOnline ? _kTextColor : Colors.grey,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Tampilkan Email (karena lokasi nama tempat tidak ada di model)
+                  Text(
+                    friend.email,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _kGreyText,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+
+                  // Tampilkan Status Text
+                  Row(
+                    children: [
+                      Icon(
+                        isOnline ? Icons.wifi : Icons.wifi_off,
+                        size: 12,
+                        color: statusColor,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        statusText,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: statusColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // --- INFO JARAK & BATERAI (KANAN) ---
+            // Hanya tampilkan kolom ini jika Online
+            if (isOnline)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // Battery Row (Tetap Dummy sesuai request)
+                  Row(
+                    children: [
+                      const Icon(Icons.battery_full,
+                          size: 16, color: _kPrimaryColor),
+                      const SizedBox(width: 4),
+                      const Text(
+                        "98%", // Dummy
+                        style: TextStyle(
+                            color: _kGreyText,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Distance Row (REAL DATA)
+                  Row(
+                    children: [
+                      const Icon(Icons.near_me, // Ganti icon jadi panah arah
+                          size: 16,
+                          color: _kPrimaryColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        distanceText, // Hasil hitungan KM
+                        style: const TextStyle(
+                            color: _kPrimaryColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -579,11 +1006,11 @@ class _LocationSharingButton extends StatelessWidget {
     return FloatingActionButton(
       heroTag: "btn-share-location",
       backgroundColor:
-          vm.isUserSharingLocation ? Colors.green : Colors.grey.shade400,
+          vm.isUserSharingLocation ? _kPrimaryColor : Colors.grey.shade400,
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       onPressed: () {
-        // toggle on/off
         vm.toggleLocationSharing(!vm.isUserSharingLocation);
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(vm.isUserSharingLocation
@@ -601,7 +1028,7 @@ class _LocationSharingButton extends StatelessWidget {
   }
 }
 
-// 4.2 Group Dropdown Button (Mengganti Search Bar di kanan)
+// Group Dropdown Button (Tetap sama logic, hanya styling sedikit)
 class _GroupDropdownButton extends StatelessWidget {
   final HomeViewModel vm;
   const _GroupDropdownButton({required this.vm});
@@ -609,15 +1036,17 @@ class _GroupDropdownButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 45,
-      width: 45,
+      height: 50,
+      width: 50,
       decoration: BoxDecoration(
         color: Colors.white,
         shape: BoxShape.circle,
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4))
+        ],
       ),
       child: IconButton(
-        icon: const Icon(Icons.group, color: _kPeachIconColor, size: 22),
+        icon: const Icon(Icons.group, color: _kPrimaryColor, size: 24),
         onPressed: () => _showGroupModal(context),
       ),
     );
@@ -639,9 +1068,8 @@ class _GroupDropdownButton extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // ... drag handle & title ...
               ListTile(
-                leading: const Icon(Icons.list, color: _kPeachIconColor),
+                leading: const Icon(Icons.list, color: _kPrimaryColor),
                 title: const Text('All Groups'),
                 onTap: () {
                   Navigator.pop(context);
@@ -665,12 +1093,13 @@ class _GroupDropdownButton extends StatelessWidget {
                     itemBuilder: (context, index) {
                       final group = groups[index];
                       return ListTile(
-                        leading:
-                            const Icon(Icons.group, color: _kPeachIconColor),
+                        leading: const Icon(Icons.group, color: _kPrimaryColor),
                         title: Text(group.name),
-                        onTap: () {
+                        onTap: () async {
+                          // Tutup modal dulu
                           Navigator.pop(context);
-                          vm.setCurrentGroup(group.id);
+                          // Baru set grup (agar UI di belakang modal terlihat update)
+                          await vm.setCurrentGroup(group.id);
                         },
                       );
                     },
@@ -678,16 +1107,30 @@ class _GroupDropdownButton extends StatelessWidget {
                 ),
               const Divider(),
               ListTile(
-                leading: const Icon(Icons.add_circle_outline,
-                    color: _kPrimaryButtonColor),
+                leading:
+                    const Icon(Icons.add_circle_outline, color: _kPrimaryColor),
                 title: const Text('Create New Group',
-                    style: TextStyle(color: _kPrimaryButtonColor)),
+                    style: TextStyle(color: _kPrimaryColor)),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(context); // 1. Tutup Modal
+
+                  // 2. Pindah ke Halaman Create Group
                   Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const CreateGroupPage()));
+                    context,
+                    MaterialPageRoute(builder: (_) => const CreateGroupPage()),
+                  ).then((_) {
+                    // 🔥 3. FIX: LOGIC SAAT KEMBALI (ON BACK)
+                    // Saat user kembali dari CreateGroupPage, data 'friends' mungkin rusak
+                    // karena tertimpa data global. Kita harus kembalikan ke konteks grup saat ini.
+
+                    if (vm.currentGroupId != null) {
+                      // Jika user sedang membuka grup spesifik, ambil ulang data grup itu
+                      vm.fetchFriendsByGroup(vm.currentGroupId!);
+                    } else {
+                      // Jika user sedang di mode 'All Groups', ambil ulang data global + lokasi
+                      vm.fetchFriends();
+                    }
+                  });
                 },
               ),
             ],
@@ -698,62 +1141,107 @@ class _GroupDropdownButton extends StatelessWidget {
   }
 }
 
-// ... _LocationSharingToggle (diubah untuk menghapus Group Dropdown lama) ...
-// 3.2.1 Item Daftar Teman
-class _FriendListItem extends StatelessWidget {
-  final Friend friend;
-  const _FriendListItem({required this.friend});
-
-  @override
-  Widget build(BuildContext context) {
-    // Status visual: jika tidak berbagi lokasi
-    final bool isOffline = friend.latitude == null;
-
-    return ListTile(
-      leading: CircleAvatar(
-        radius: 20,
-        backgroundColor: Colors.grey.shade200,
-        child: Text(friend.name[0]),
-      ),
-      title: Text(friend.name,
-          style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(isOffline ? 'Location Disabled' : 'Online'),
-      trailing: isOffline
-          ? const Icon(Icons.visibility_off, color: Colors.redAccent)
-          : const Icon(Icons.location_on, color: Colors.green),
-      onTap: () {
-        // TODO: Fokuskan Map ke lokasi teman ini
-      },
-    );
-  }
-}
-
-// 3.3 Marker Peta
+// 3.3 Marker Peta (Sedikit dirapikan)
 class _FriendMapMarker extends StatelessWidget {
   final Friend friend;
   const _FriendMapMarker({required this.friend});
+
+  // Tentukan lebar maksimum yang wajar untuk marker nama
+  static const double _maxNameWidth = 80.0;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        CircleAvatar(
-          radius: 15,
-          backgroundColor: _kPrimaryButtonColor,
-          child: Text(
-            friend.name[0],
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+        Container(
+          padding: const EdgeInsets.all(2),
+          decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]),
+          child: CircleAvatar(
+            radius: 18,
+            backgroundColor: _kPrimaryColor,
+            child: Text(
+              friend.name[0],
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold),
+            ),
           ),
         ),
+        const SizedBox(height: 2),
+        // 🔥 MODIFIKASI DIMULAI DI SINI
         Container(
+          // 1. Batasi lebar Container
+          constraints: const BoxConstraints(maxWidth: _maxNameWidth),
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _kPrimaryButtonColor, width: 2),
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 2)],
           ),
-          child: Text(friend.name, style: const TextStyle(fontSize: 10)),
+          child: Text(
+            friend.name,
+            textAlign: TextAlign.center, // Pastikan teks di tengah
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+            // 2. Tambahkan properti overflow
+            overflow: TextOverflow.ellipsis,
+            // 3. Batasi baris agar rapi
+            maxLines: 1,
+          ),
         )
+      ],
+    );
+  }
+}
+
+class _AddEventMarkerIcon extends StatelessWidget {
+  const _AddEventMarkerIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end, // Untuk menyejajarkan balon
+      children: [
+        // Balon Dialog (Speech Bubble)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.black, width: 1.5), // Garis hitam
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 4,
+                offset: Offset(1, 1),
+              ),
+            ],
+          ),
+          child: const Text(
+            "add event here",
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        // Segitiga kecil untuk 'balon' (opsional, untuk kesederhanaan kita skip/ganti dengan styling)
+        // Jika ingin *persis* seperti gambar, perlu CustomPaint yang lebih kompleks, tapi ini lebih sederhana.
+
+        // Pin Lokasi Oranye (Marker)
+        const Icon(
+          Icons.location_on, // Mengganti pin dengan ikon yang lebih mirip
+          color: _kPrimaryColor, // Warna Oranye
+          size: 45,
+        ),
+        // Memberikan ruang agar ikon pin muncul lebih ke bawah,
+        // sehingga "Add Event Here" ada di atasnya
+        const SizedBox(height: 10),
       ],
     );
   }
