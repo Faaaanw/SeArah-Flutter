@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:searah_backend/pages/create_event_page.dart';
 import 'package:searah_backend/pages/create_group_page.dart';
+import 'package:searah_backend/pages/event_detail.dart';
 import 'package:searah_backend/pages/friends_page.dart';
 import '../viewmodel/home_viewmodel.dart';
 import '../models/friend_model.dart';
@@ -112,11 +113,6 @@ class _HomeViewState extends State<_HomeView> {
 
           // 2. Search & Filter
           _buildSearchAndFilter(context, vm),
-          Positioned(
-            top: 120, // Jarak dari atas (di bawah search bar)
-            right: 24, // Rata kanan sejajar margin
-            child: _buildRefreshFloatingButton(context, vm),
-          ),
 
           // 3. Bottom Panel (Background Putih Melengkung)
           if (vm.hasGroups && !vm.isLoading && !vm.isEventLoading)
@@ -148,7 +144,7 @@ class _HomeViewState extends State<_HomeView> {
                 ),
                 child: Padding(
                   padding:
-                      EdgeInsets.only(top: vm.events.isNotEmpty ? 20.0 : 10.0),
+                      EdgeInsets.only(top: vm.events.isNotEmpty ? 20.0 : 20.0),
                   child: bottomPanelContent,
                 ),
               ),
@@ -160,7 +156,7 @@ class _HomeViewState extends State<_HomeView> {
               right: 0,
               bottom: (MediaQuery.of(context).size.height * 0.40) - 50,
               child: SizedBox(
-                height: 100,
+                height: 130,
                 child: PageView.builder(
                   controller: _pageController,
                   itemCount: sortedEvents.length, // Pakai sortedEvents
@@ -188,7 +184,7 @@ class _HomeViewState extends State<_HomeView> {
             // TOMBOL KIRI
             Positioned(
               left: 10,
-              bottom: (MediaQuery.of(context).size.height * 0.40) - 20,
+              bottom: (MediaQuery.of(context).size.height * 0.40) - 10,
               child: IconButton(
                 icon: const Icon(Icons.chevron_left,
                     color: Colors.white, size: 30),
@@ -199,7 +195,7 @@ class _HomeViewState extends State<_HomeView> {
             // TOMBOL KANAN
             Positioned(
               right: 10,
-              bottom: (MediaQuery.of(context).size.height * 0.40) - 20,
+              bottom: (MediaQuery.of(context).size.height * 0.40) - 10,
               child: IconButton(
                 icon: const Icon(Icons.chevron_right,
                     color: Colors.white, size: 30),
@@ -220,52 +216,6 @@ class _HomeViewState extends State<_HomeView> {
       ),
     );
   }
-}
-
-Widget _buildRefreshFloatingButton(BuildContext context, HomeViewModel vm) {
-  return Container(
-    height: 45,
-    width: 45,
-    decoration: BoxDecoration(
-      color: Colors.white,
-      shape: BoxShape.circle,
-      boxShadow: const [
-        BoxShadow(
-          color: Colors.black12,
-          blurRadius: 10,
-          offset: Offset(0, 4),
-        )
-      ],
-    ),
-    child: Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(30),
-        onTap: () {
-          // Panggil fungsi refresh yang me-reload SEMUA data
-          // (Teman, Grup, Lokasi, Event)
-          vm.refreshData();
-
-          // Opsional: Tampilkan snackbar kecil feedback
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Refreshing data..."),
-              duration: Duration(seconds: 1),
-              behavior: SnackBarBehavior.floating,
-              margin: EdgeInsets.only(bottom: 20, left: 20, right: 20),
-            ),
-          );
-        },
-        child: vm.isLoading
-            ? const Padding(
-                padding: EdgeInsets.all(10.0),
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: _kPrimaryColor),
-              )
-            : const Icon(Icons.refresh, color: _kPrimaryColor, size: 24),
-      ),
-    ),
-  );
 }
 
 // ... _buildMapLayer (Logic Tetap Sama) ...
@@ -338,8 +288,6 @@ Widget _buildMapLayer(
                     )
                   ];
 
-            // 🔥 Marker popup "Add Event Here"
-            // HANYA TAMPIL JIKA searchMarker ADA DAN currentGroupId TIDAK NULL
             final addEventPopup = (vm.searchMarker == null ||
                     vm.currentGroupId == null)
                 ? <Marker>[]
@@ -736,6 +684,9 @@ class _EmptyFriendListPlaceholder extends StatelessWidget {
 class _EventCard extends StatelessWidget {
   final Event? event;
   final LatLng userLocation;
+  // Warna primary
+  static const Color _kPrimaryColor = Color(0xFFFA8B60);
+
   const _EventCard({super.key, this.event, required this.userLocation});
 
   @override
@@ -770,33 +721,42 @@ class _EventCard extends StatelessWidget {
       return "${dt.day} ${months[dt.month - 1]} ${dt.year}";
     }
 
-    return SizedBox(
-      height: 100, // Tinggi fix agar compact
-      child: Stack(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-            decoration: BoxDecoration(
-                color: _kPrimaryColor,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                      color: _kPrimaryColor.withOpacity(0.4),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4))
-                ],
-                gradient: const LinearGradient(
-                    colors: [Color(0xFFFA8B60), Color(0xFFF37140)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight)),
-            child: Row(
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EventDetailPage(event: event!),
+          ),
+        );
+      },
+      child: Container(
+        // Tidak perlu height fix disini, ikut parent
+        // 🔥 PADDING OPTIMAL: Tidak terlalu besar agar muat banyak teks
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        decoration: BoxDecoration(
+            color: _kPrimaryColor,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                  color: _kPrimaryColor.withOpacity(0.4),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4))
+            ],
+            gradient: const LinearGradient(
+                colors: [Color(0xFFFA8B60), Color(0xFFF37140)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight)),
+        child: Stack(
+          children: [
+            Row(
               children: [
                 // Gambar Kecil
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
-                    width: 70,
-                    height: 70,
+                    width: 80, // Lebar gambar proporsional
+                    height: 80,
                     color: Colors.white,
                     child: Image.asset('assets/images/event_placeholder.png',
                         fit: BoxFit.cover,
@@ -805,15 +765,17 @@ class _EventCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
+
                 // Info Text
                 Expanded(
                   child: Column(
+                    // 🔥 ALIGNMENT: Rata Kiri & Tengah Vertikal
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Padding(
                         padding: const EdgeInsets.only(
-                            right: 50.0), // Space untuk badge jarak
+                            right: 40.0), // Space untuk badge jarak
                         child: Text(event?.title ?? 'Event',
                             style: const TextStyle(
                                 fontSize: 16,
@@ -822,11 +784,13 @@ class _EventCard extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       _iconText(
                           Icons.calendar_today, formatDate(event?.startTime)),
+                      const SizedBox(height: 2),
                       _iconText(Icons.access_time,
                           "${formatTime(event?.startTime)} - ${formatTime(event?.endTime)}"),
+                      const SizedBox(height: 2),
                       _iconText(
                           Icons.location_on, event?.locationName ?? "Location"),
                     ],
@@ -834,51 +798,74 @@ class _EventCard extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          // Badge Jarak
-          Positioned(
-            top: 10,
-            right: 10,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                  color: Colors.white, borderRadius: BorderRadius.circular(12)),
-              child: Text("${km.toStringAsFixed(1)}Km",
-                  style: const TextStyle(
-                      color: _kPrimaryColor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold)),
+
+            // Badge Jarak (Pojok Kanan Atas)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12)),
+                child: Text("${km.toStringAsFixed(1)}Km",
+                    style: const TextStyle(
+                        color: _kPrimaryColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold)),
+              ),
             ),
-          ),
-          // Tombol Join/Leave
-          Positioned(
-            bottom: 10,
-            right: 10,
-            child: Consumer<HomeViewModel>(builder: (context, vm, _) {
-              final joined = event!.isJoined;
-              return GestureDetector(
-                onTap: () => joined
-                    ? vm.leaveEvent(event!.id!)
-                    : vm.joinEvent(event!.id!),
+
+            // Indikator Joined (Pojok Kanan Bawah)
+            if (event!.isJoined)
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: Colors.green,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black26, blurRadius: 4)
+                      ]),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.check, color: Colors.white, size: 12),
+                      SizedBox(width: 4),
+                      Text("Joined",
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              )
+            else
+              // Tombol View Kecil jika belum join
+              Positioned(
+                bottom: 0,
+                right: 0,
                 child: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.25),
                       shape: BoxShape.circle),
-                  child: Icon(joined ? Icons.check : Icons.add,
-                      color: Colors.white, size: 18),
+                  child: const Icon(Icons.arrow_forward_ios,
+                      color: Colors.white, size: 14),
                 ),
-              );
-            }),
-          )
-        ],
+              ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _iconText(IconData icon, String text) {
     return Row(children: [
-      Icon(icon, color: Colors.white, size: 11),
+      Icon(icon, color: Colors.white70, size: 12),
       const SizedBox(width: 4),
       Expanded(
           child: Text(text,

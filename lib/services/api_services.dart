@@ -3,7 +3,8 @@ import 'package:http/http.dart' as http;
 import 'package:searah_backend/models/event_model.dart';
 import 'package:searah_backend/models/friend_model.dart';
 import 'package:searah_backend/models/group_model.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class ApiService {
   //api route
@@ -167,10 +168,7 @@ class ApiService {
   }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/friends/add'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
+      headers: _getHeaders(token: token, isJson: true),
       body: jsonEncode({
         'user_id': userId,
         'friend_id': friendId,
@@ -283,20 +281,30 @@ class ApiService {
   }
 
   // 🌐 GET Request Umum (bisa digunakan untuk endpoint seperti /search-user)
+  // 🔥 TAMBAHKAN FUNGSI INI DI DALAM CLASS ApiService
   static Future<Map<String, dynamic>> getRequest(
       String endpoint, String token) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl$endpoint'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      },
-    );
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: _getHeaders(token: token),
+      );
 
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('Gagal melakukan GET ke $endpoint: ${response.body}');
+      // Debugging: Print jika error
+      if (response.statusCode != 200) {
+        print("⚠️ SERVER ERROR (${response.statusCode}):");
+        print(response
+            .body); // <-- Ini akan menampilkan pesan error HTML di console
+      }
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Gagal load data: ${response.statusCode}');
+      }
+    } catch (e) {
+      print("Error getRequest: $e");
+      rethrow;
     }
   }
 
@@ -526,6 +534,36 @@ class ApiService {
       return jsonDecode(response.body)['message'];
     } else {
       throw Exception(jsonDecode(response.body)['message']);
+    }
+  }
+
+  static Future<void> updateFcmToken(String fcmToken, String token) async {
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/user/fcm-token'),
+        headers: _getHeaders(token: token, isJson: true),
+        body: jsonEncode({'fcm_token': fcmToken}),
+      );
+      print("✅ Token FCM berhasil dikirim ke Server");
+    } catch (e) {
+      print("❌ Gagal update FCM token: $e");
+    }
+  }
+
+  // 🔥 TAMBAHAN 2: Ambil List Notifikasi
+  static Future<List<dynamic>> getNotifications(String token) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/notifications'),
+        headers: _getHeaders(token: token),
+      );
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body)['data'];
+      }
+      return [];
+    } catch (e) {
+      print("Error get notifications: $e");
+      return [];
     }
   }
 }

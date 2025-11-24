@@ -1,205 +1,182 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart'; // Pastikan package intl ada di pubspec.yaml
+import 'package:provider/provider.dart';
+import 'package:searah_backend/services/api_services.dart';
+import 'package:searah_backend/viewmodel/home_viewmodel.dart';
 
-class NotificationsPage extends StatelessWidget {
-  const NotificationsPage({super.key});
+class NotificationPage extends StatefulWidget {
+  const NotificationPage({super.key});
+
+  @override
+  State<NotificationPage> createState() => _NotificationPageState();
+}
+
+class _NotificationPageState extends State<NotificationPage> {
+  List<dynamic> _notifications = [];
+  bool _isLoading = true;
+
+  // Warna tema (sesuaikan dengan app Anda)
+  final Color _kPrimaryColor = const Color(0xFFFA8B60);
+
+  @override
+  void initState() {
+    super.initState();
+    // Ambil data saat halaman pertama kali dibuka
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchNotifications();
+    });
+  }
+
+  Future<void> _fetchNotifications() async {
+    final vm = context.read<HomeViewModel>();
+    
+    // Cek token
+    if (vm.authToken == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      final data = await ApiService.getNotifications(vm.authToken!);
+      setState(() {
+        _notifications = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print("Error fetch notif: $e");
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // Helper untuk format tanggal (Misal: "24 Nov, 14:30")
+  String _formatDate(String? dateString) {
+    if (dateString == null) return "";
+    try {
+      final DateTime date = DateTime.parse(dateString).toLocal(); // Konversi ke waktu lokal
+      return DateFormat('d MMM, HH:mm').format(date);
+    } catch (e) {
+      return dateString;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFFAF8),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  "Notifications",
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.tune, size: 26),
-                )
-              ],
-            ),
-
-            const SizedBox(height: 6),
-            Text.rich(
-              TextSpan(
-                children: [
-                  const TextSpan(text: "You have "),
-                  TextSpan(
-                    text: "3 Notifications",
-                    style: TextStyle(
-                      color: Colors.blue.shade700,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const TextSpan(text: " today."),
-                ],
-              ),
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 14,
-              ),
-            ),
-
-            const SizedBox(height: 25),
-            const Text(
-              "Today",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            _buildNotifItem(
-              name: "Elayamani",
-              message: "Liked your DailyUI",
-              detail: "045 - Favourites",
-              time: "2 h ago",
-              avatarUrl: null,
-            ),
-
-            _buildNotifItem(
-              name: "Arslan Ali",
-              message: "Liked your DailyUI",
-              detail: "044 - Food menu",
-              time: "6 h ago",
-              avatarUrl: null,
-            ),
-
-            _buildNotifItem(
-              name: "Johny vino",
-              message: "Mentioned you in a comment",
-              detail: "",
-              time: "8 h ago",
-              avatarUrl: null,
-            ),
-
-            const SizedBox(height: 25),
-            const Text(
-              "This Week",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            _buildNotifItem(
-              name: "Brice Seraphin",
-              message: "Liked your DailyUI",
-              detail: "044 - Food menu",
-              time: "6 June",
-              avatarUrl: null,
-            ),
-
-            _buildNotifItem(
-              name: "Best ui design",
-              message: "Started following you",
-              detail: "",
-              time: "5 June",
-              avatarUrl: null,
-            ),
-          ],
+      backgroundColor: Colors.white, // Background putih bersih
+      appBar: AppBar(
+        title: const Text(
+          "Notifikasi",
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
+        backgroundColor: Colors.white,
+        elevation: 0, // Flat design
+        iconTheme: const IconThemeData(color: Colors.black), // Tombol back hitam
+      ),
+      body: RefreshIndicator(
+        color: _kPrimaryColor,
+        onRefresh: _fetchNotifications, // Tarik ke bawah untuk refresh
+        child: _isLoading
+            ? Center(child: CircularProgressIndicator(color: _kPrimaryColor))
+            : _notifications.isEmpty
+                ? _buildEmptyState()
+                : _buildNotificationList(),
       ),
     );
   }
 
-  Widget _buildNotifItem({
-    required String name,
-    required String message,
-    required String detail,
-    required String time,
-    String? avatarUrl,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  // Widget Tampilan Kosong
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 26,
-                backgroundImage: avatarUrl != null
-                    ? NetworkImage(avatarUrl)
-                    : const AssetImage("assets/default_profile.png")
-                        as ImageProvider,
-              ),
-              Positioned(
-                bottom: 2,
-                right: 2,
-                child: Container(
-                  width: 10,
-                  height: 10,
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              )
-            ],
+          Icon(Icons.notifications_off_outlined,
+              size: 80, color: Colors.grey[300]),
+          const SizedBox(height: 16),
+          Text(
+            "Belum ada notifikasi",
+            style: TextStyle(color: Colors.grey[500], fontSize: 16),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                RichText(
-                  text: TextSpan(
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 14,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: "$name ",
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      TextSpan(text: "$message "),
-                      if (detail.isNotEmpty)
-                        TextSpan(
-                          text: detail,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  time,
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Container(
-            width: 50,
-            height: 45,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              borderRadius: BorderRadius.circular(10),
-            ),
-          )
         ],
       ),
     );
+  }
+
+  // Widget List Notifikasi
+  Widget _buildNotificationList() {
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: _notifications.length,
+      separatorBuilder: (context, index) => const Divider(height: 24),
+      itemBuilder: (context, index) {
+        final notif = _notifications[index];
+        final bool isRead = (notif['is_read'] ?? 0) == 1;
+
+        return Container(
+          // Opsional: Beri background tipis jika belum dibaca
+          decoration: BoxDecoration(
+            color: isRead ? Colors.white : _kPrimaryColor.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            leading: CircleAvatar(
+              radius: 24,
+              backgroundColor: _kPrimaryColor.withOpacity(0.2),
+              child: Icon(
+                _getIconByType(notif['type']),
+                color: _kPrimaryColor,
+                size: 24,
+              ),
+            ),
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    notif['title'] ?? 'Info',
+                    style: TextStyle(
+                      fontWeight: isRead ? FontWeight.w600 : FontWeight.bold,
+                      fontSize: 15,
+                      color: Colors.black87,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  _formatDate(notif['created_at']),
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+              ],
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Text(
+                notif['body'] ?? '',
+                style: TextStyle(
+                  color: isRead ? Colors.grey[600] : Colors.black87,
+                  fontSize: 13,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            onTap: () {
+              // TODO: Bisa tambahkan aksi, misal tandai sudah dibaca
+              // atau navigasi ke halaman detail event/teman
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  // Helper Icon berdasarkan tipe notifikasi
+  IconData _getIconByType(String? type) {
+    if (type == 'friend_request') return Icons.person_add;
+    if (type == 'new_event') return Icons.event;
+    if (type == 'event_join') return Icons.group_add;
+    return Icons.notifications; // Default icon
   }
 }

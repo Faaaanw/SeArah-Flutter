@@ -8,11 +8,13 @@ class Event {
   final double locationLatitude;
   final double locationLongitude;
   final DateTime startTime;
-  final DateTime endTime; // 🆕 WAJIB ADA
+  final DateTime endTime;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final bool isJoined;
   final int participantsCount;
+  // ⭐ FIX: Properti ini wajib ada dan dihandle null-nya
+  final List<dynamic> participants;
 
   Event({
     this.id,
@@ -24,11 +26,13 @@ class Event {
     required this.locationLatitude,
     required this.locationLongitude,
     required this.startTime,
-    required this.endTime, // 🆕
+    required this.endTime,
     this.createdAt,
     this.updatedAt,
     this.isJoined = false,
     this.participantsCount = 0,
+    // ⭐ Default list kosong
+    this.participants = const [],
   });
 
   factory Event.fromJson(Map<String, dynamic> json) {
@@ -45,6 +49,8 @@ class Event {
       endTime: DateTime.parse(json['end_time']),
       isJoined: json['is_joined'] ?? false,
       participantsCount: json['participants_count'] ?? 0,
+      // ⭐ FIX UTAMA: Gunakan '?? []' agar tidak crash jika API mengirim null
+      participants: json['participants'] ?? [],
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : null,
@@ -65,7 +71,7 @@ class Event {
       'location_latitude': locationLatitude,
       'location_longitude': locationLongitude,
       'start_time': startTime.toIso8601String(),
-      'end_time': endTime.toIso8601String(), // 🆕
+      'end_time': endTime.toIso8601String(),
       'is_joined': isJoined,
       'participants_count': participantsCount,
       'created_at':
@@ -89,12 +95,15 @@ class Event {
       endTime: DateTime.parse(map['end_time']),
       isJoined: map['is_joined'] ?? false,
       participantsCount: map['participants_count'] ?? 0,
+      // ⭐ FIX: Handle null di sini juga
+      participants: map['participants'] ?? [],
       createdAt:
           map['created_at'] != null ? DateTime.parse(map['created_at']) : null,
       updatedAt:
           map['updated_at'] != null ? DateTime.parse(map['updated_at']) : null,
     );
   }
+
   static double _parseDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is double) return value;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../viewmodel/friend_viewmodel.dart'; // Pastikan path ini benar
+import 'package:quickalert/quickalert.dart';
 
 class FriendsPage extends StatefulWidget {
   const FriendsPage({super.key});
@@ -444,7 +445,7 @@ class _FriendsPageState extends State<FriendsPage> {
                             child: Padding(
                               padding: EdgeInsets.all(32.0),
                               child: Text(
-                                "🎉 Tidak ada permintaan masuk. Semua aman! 🛡️",
+                                "You have no pending friend requests.",
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                     fontFamily: fontName,
