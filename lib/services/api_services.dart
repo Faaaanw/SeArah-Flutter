@@ -7,14 +7,31 @@ import 'package:geolocator/geolocator.dart';
 
 class ApiService {
   //api route
-  static const String baseUrl = "http://192.168.1.18:8003/api";
+  static const String baseUrl =
+      "https://unabrogable-atoneable-lashell.ngrok-free.dev/api";
+  static Map<String, String> _getHeaders({String? token, bool isJson = false}) {
+    Map<String, String> headers = {
+      "ngrok-skip-browser-warning": "true", // 🔥 INI KUNCINYA
+      "Accept": "application/json",
+    };
+
+    if (isJson) {
+      headers["Content-Type"] = "application/json";
+    }
+
+    if (token != null) {
+      headers["Authorization"] = "Bearer $token";
+    }
+
+    return headers;
+  }
 
   //  LOGIN MANUAL
   static Future<Map<String, dynamic>> login(
       String email, String password) async {
     final response = await http.post(
       Uri.parse('$baseUrl/login'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _getHeaders(isJson: true),
       body: jsonEncode({'email': email, 'password': password}),
     );
 
@@ -32,7 +49,7 @@ class ApiService {
 
     final response = await http.post(
       Uri.parse('$baseUrl/google-login'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _getHeaders(isJson: true),
       body: jsonEncode(body),
     );
 
@@ -44,7 +61,7 @@ class ApiService {
       String password, String confirmPassword) async {
     final response = await http.post(
       Uri.parse('$baseUrl/register'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _getHeaders(isJson: true),
       body: jsonEncode({
         'name': name,
         'email': email,
@@ -66,10 +83,7 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/change-password'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: _getHeaders(token: token, isJson: true),
       body: jsonEncode({
         'current_password': currentPassword,
         'new_password': newPassword,
@@ -86,10 +100,7 @@ class ApiService {
   static Future<void> logout(String token) async {
     final response = await http.post(
       Uri.parse('$baseUrl/logout'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: _getHeaders(token: token, isJson: true),
     );
 
     if (response.statusCode != 200) {
@@ -101,7 +112,7 @@ class ApiService {
   static Future<Map<String, dynamic>> getCurrentUser(String token) async {
     final response = await http.get(
       Uri.parse('$baseUrl/user'),
-      headers: {'Authorization': 'Bearer $token'},
+      headers: _getHeaders(token: token),
     );
 
     if (response.statusCode == 200) {
@@ -133,7 +144,7 @@ class ApiService {
   static Future<List<dynamic>> getFriends(String token) async {
     final res = await http.get(
       Uri.parse('$baseUrl/friends/list'),
-      headers: {'Authorization': 'Bearer $token'},
+      headers: _getHeaders(token: token),
     );
 
     if (res.statusCode == 200) {
@@ -177,7 +188,7 @@ class ApiService {
   static Future<void> acceptFriend(int friendshipId, String token) async {
     final res = await http.post(
       Uri.parse('$baseUrl/friends/accept/$friendshipId'),
-      headers: {'Authorization': 'Bearer $token'},
+      headers: _getHeaders(token: token),
     );
 
     if (res.statusCode != 200) {
@@ -191,7 +202,7 @@ class ApiService {
       int userId, String token) async {
     final res = await http.get(
       Uri.parse('$baseUrl/location/friends/$userId'),
-      headers: {'Authorization': 'Bearer $token'},
+      headers: _getHeaders(token: token),
     );
 
     if (res.statusCode == 200) {
@@ -211,7 +222,7 @@ class ApiService {
   static Future<List<Group>> getUserGroups(String token) async {
     final response = await http.get(
       Uri.parse('$baseUrl/groups'),
-      headers: {'Authorization': 'Bearer $token'},
+      headers: _getHeaders(token: token),
     );
 
     if (response.statusCode == 200) {
@@ -233,10 +244,7 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/groups'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
+      headers: _getHeaders(token: token, isJson: true),
       body: jsonEncode({
         'name': name,
         'description': description,
@@ -262,10 +270,7 @@ class ApiService {
     final response = await http.post(
       // URL: /groups/{group}/members
       Uri.parse('$baseUrl/groups/$groupId/members'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
+      headers: _getHeaders(token: token, isJson: true),
       body: jsonEncode({
         'user_id': memberUserId,
       }),
@@ -300,12 +305,8 @@ class ApiService {
     required String token,
   }) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/groups/$groupId/members-location'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      },
-    );
+        Uri.parse('$baseUrl/groups/$groupId/members-location'),
+        headers: _getHeaders(token: token));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -325,7 +326,7 @@ class ApiService {
   static Future<List<dynamic>> getPendingRequests(String token) async {
     final res = await http.get(
       Uri.parse('$baseUrl/friends/requests/pending'),
-      headers: {'Authorization': 'Bearer $token'},
+      headers: _getHeaders(token: token),
     );
 
     print("Pending Friends Status: ${res.statusCode}");
@@ -355,10 +356,7 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/location/update'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: _getHeaders(token: token, isJson: true),
       body: jsonEncode({
         'user_id': userId,
         'latitude': latitude,
@@ -381,7 +379,7 @@ class ApiService {
         url += '&lat=$lat&lon=$lon';
       }
 
-      final response = await http.get(Uri.parse(url));
+      final response = await http.get(Uri.parse(url), headers: _getHeaders());
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -400,12 +398,8 @@ class ApiService {
     required String token,
   }) async {
     final res = await http.get(
-      Uri.parse('$baseUrl/groups/$groupId/members-location'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      },
-    );
+        Uri.parse('$baseUrl/groups/$groupId/members-location'),
+        headers: _getHeaders(token: token));
 
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
@@ -451,10 +445,7 @@ class ApiService {
 
     final response = await http.post(
       Uri.parse('$baseUrl/events'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json'
-      },
+      headers: _getHeaders(token: token, isJson: true),
       body: jsonEncode(eventData),
     );
 
@@ -467,20 +458,32 @@ class ApiService {
   }
 
 // 2. 🔍 Ambil Semua Event Grup dari Server
+  // 🔍 Ambil Semua Event Grup (FIXED HEADER)
   static Future<List<Event>> getGroupEvents(int groupId, String token) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/groups/$groupId/events'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/groups/$groupId/events'),
+        // 🔥 GANTI INI: Gunakan _getHeaders agar lolos peringatan Ngrok
+        headers: _getHeaders(token: token),
+      );
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
 
-      final events = data['events'] as List;
-      return events.map((json) => Event.fromJson(json)).toList();
-    } else {
-      throw Exception(
-          'Gagal mengambil event grup: ${jsonDecode(response.body)['message'] ?? 'Error server.'}');
+        // Pastikan key 'events' ada dan berupa List
+        if (data['events'] != null && data['events'] is List) {
+          final events = data['events'] as List;
+          return events.map((json) => Event.fromJson(json)).toList();
+        } else {
+          return [];
+        }
+      } else {
+        throw Exception(
+            'Gagal mengambil event: ${jsonDecode(response.body)['message'] ?? response.body}');
+      }
+    } catch (e) {
+      print("Error getGroupEvents: $e");
+      rethrow; // Lempar error agar bisa ditangkap di ViewModel
     }
   }
 
@@ -490,7 +493,7 @@ class ApiService {
   }) async {
     final response = await http.get(
       Uri.parse('$baseUrl/events/$eventId/distance'),
-      headers: {'Authorization': 'Bearer $token'},
+      headers: _getHeaders(token: token),
     );
 
     if (response.statusCode == 200) {
@@ -503,7 +506,7 @@ class ApiService {
   static Future<String> joinEvent(int eventId, String token) async {
     final response = await http.post(
       Uri.parse('$baseUrl/events/$eventId/join'),
-      headers: {'Authorization': 'Bearer $token'},
+      headers: _getHeaders(token: token),
     );
 
     if (response.statusCode == 200) {
@@ -516,7 +519,7 @@ class ApiService {
   static Future<String> leaveEvent(int eventId, String token) async {
     final response = await http.post(
       Uri.parse('$baseUrl/events/$eventId/leave'),
-      headers: {'Authorization': 'Bearer $token'},
+      headers: _getHeaders(token: token),
     );
 
     if (response.statusCode == 200) {

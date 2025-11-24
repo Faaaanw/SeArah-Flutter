@@ -1,0 +1,364 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import 'package:searah_backend/models/event_model.dart';
+import 'package:searah_backend/viewmodel/home_viewmodel.dart';
+// import 'package:searah_backend/models/friend_model.dart'; // Uncomment jika perlu import Friend model
+
+class EventDetailPage extends StatelessWidget {
+  final Event event;
+
+  const EventDetailPage({super.key, required this.event});
+
+  // ----------------------------------------------------------------------
+  // FUNGSI POPUP DAFTAR PESERTA
+  // ----------------------------------------------------------------------
+  void _showParticipantsModal(
+      BuildContext context, HomeViewModel vm, Event currentEvent) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        // 🔥 PERBAIKAN: Ambil langsung dari participants event
+        // Tidak perlu dicocokkan dengan vm.friends agar tidak ada masalah tipe data/missing data
+        final List<dynamic> participants = currentEvent.participants;
+
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.5,
+          minChildSize: 0.3,
+          maxChildSize: 0.8,
+          builder: (_, controller) {
+            return Container(
+              padding: const EdgeInsets.only(top: 16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Indikator Drag
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Judul
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      "Peserta Event (${participants.length})",
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const Divider(height: 20),
+
+                  // List Peserta
+                  Expanded(
+                    child: participants.isEmpty
+                        ? const Center(
+                            child: Text(
+                              "Belum ada peserta.",
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: controller,
+                            itemCount: participants.length,
+                            itemBuilder: (context, index) {
+                              // Ambil data map langsung (aman dari error tipe)
+                              final member = participants[index];
+
+                              // Safety check untuk nama dan email
+                              final String name =
+                                  member['name'] ?? 'Tanpa Nama';
+                              final String email = member['email'] ?? '';
+                              final int memberId = member['id'];
+
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: const Color(0xFFFA8B60),
+                                  child: Text(
+                                    name.isNotEmpty
+                                        ? name[0].toUpperCase()
+                                        : "?",
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                                title: Text(name),
+                                subtitle: email.isNotEmpty ? Text(email) : null,
+                                trailing: memberId == currentEvent.creatorId
+                                    ? Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                            color: Colors.blue.withOpacity(0.1),
+                                            borderRadius:
+                                                BorderRadius.circular(8)),
+                                        child: const Text("Host",
+                                            style: TextStyle(
+                                                color: Colors.blue,
+                                                fontSize: 12)))
+                                    : null,
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFormat = DateFormat('EEE, d MMMM yyyy');
+    final timeFormat = DateFormat('HH:mm');
+
+    return Consumer<HomeViewModel>(
+      builder: (context, vm, child) {
+        // Ambil data event terbaru dari state (jika ada update)
+        final currentEvent = vm.events.firstWhere(
+          (e) => e.id == event.id,
+          orElse: () => event,
+        );
+
+        final String creatorName = vm.getCreatorName(currentEvent.creatorId);
+
+        return Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            title: const Text("Detail Event",
+                style: TextStyle(color: Colors.black)),
+            backgroundColor: Colors.white,
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.black),
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. Gambar Event
+                Container(
+                  width: double.infinity,
+                  height: 180,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.asset(
+                      'assets/images/event_placeholder.png',
+                      fit: BoxFit.cover,
+                      errorBuilder: (c, e, s) =>
+                          const Icon(Icons.image, size: 50, color: Colors.grey),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // 2. Judul & Status
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        currentEvent.title,
+                        style: const TextStyle(
+                            fontSize: 24, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    if (currentEvent.isJoined)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green),
+                        ),
+                        child: const Text(
+                          "Joined",
+                          style: TextStyle(
+                              color: Colors.green, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // 3. Info Bar (Creator & Participants)
+                Row(
+                  children: [
+                    const CircleAvatar(
+                      radius: 16,
+                      backgroundColor: Colors.blueAccent,
+                      child: Icon(Icons.person, size: 16, color: Colors.white),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Dibuat oleh",
+                            style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        Text(creatorName,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                    const Spacer(),
+
+                    // TOMBOL LIHAT PESERTA
+                    InkWell(
+                      onTap: () =>
+                          _showParticipantsModal(context, vm, currentEvent),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.group,
+                                size: 16, color: Colors.orange),
+                            const SizedBox(width: 4),
+                            Text(
+                              "${currentEvent.participantsCount} Peserta",
+                              style: const TextStyle(
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  ],
+                ),
+                const Divider(height: 30),
+
+                // 4. Waktu & Lokasi
+                _detailRow(Icons.calendar_today, "Tanggal",
+                    dateFormat.format(currentEvent.startTime)),
+                const SizedBox(height: 12),
+                _detailRow(Icons.access_time, "Waktu",
+                    "${timeFormat.format(currentEvent.startTime)} - ${timeFormat.format(currentEvent.endTime)} WIB"),
+                const SizedBox(height: 12),
+                _detailRow(Icons.location_on, "Lokasi",
+                    currentEvent.locationName ?? "Lokasi ditentukan di peta"),
+
+                const Divider(height: 30),
+
+                // 5. Deskripsi
+                const Text("Deskripsi",
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text(
+                  currentEvent.description ?? "Tidak ada deskripsi.",
+                  style: const TextStyle(color: Colors.grey, height: 1.5),
+                ),
+                const SizedBox(height: 100),
+              ],
+            ),
+          ),
+
+          // 6. Tombol Aksi
+          bottomNavigationBar: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 10,
+                    offset: const Offset(0, -5))
+              ],
+            ),
+            child: SizedBox(
+              height: 50,
+              child: ElevatedButton(
+                onPressed: vm.isUserSharingLocation
+                    ? () {
+                        if (currentEvent.isJoined) {
+                          vm.leaveEvent(currentEvent.id!);
+                        } else {
+                          vm.joinEvent(currentEvent.id!);
+                        }
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: currentEvent.isJoined
+                      ? Colors.redAccent
+                      : const Color(0xFFFA8B60),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: vm.isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : Text(
+                        currentEvent.isJoined
+                            ? "Batalkan Keikutsertaan (Leave)"
+                            : "Ikuti Event Ini (Join)",
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold),
+                      ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Widget Row Detail (Anti Overflow)
+  Widget _detailRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: Colors.grey, size: 20),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}

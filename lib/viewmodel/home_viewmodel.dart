@@ -215,12 +215,6 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
-  // ----------------------------------------------------
-  // 🔄 FUNGSI LOKASI REALTIME (🔥 UPDATED FIX ERROR)
-  // ----------------------------------------------------
-
-  /// 🔥 FIX: Helper function untuk mengecek izin & service SECARA AMAN
-  /// Ini mencegah error "Object is not subtype of Position" di Web
   Future<Position> _safeDeterminePosition() async {
     bool serviceEnabled;
     LocationPermission permission;
@@ -251,7 +245,6 @@ class HomeViewModel extends ChangeNotifier {
     );
   }
 
-  /// 🔥 FIX: Menggunakan _safeDeterminePosition
   Future<void> _getCurrentUserPositionOnce() async {
     try {
       // Panggil fungsi aman yang kita buat di atas
@@ -271,18 +264,9 @@ class HomeViewModel extends ChangeNotifier {
     } catch (e) {
       // Tangani jika error, jangan crash
       debugPrint('⚠️ Gagal mendapatkan lokasi (sekali): $e');
-      // Opsional: Set lokasi default jika gagal total
-      // _userLocation = LatLng(-6.8208, 107.1396);
     }
   }
 
-  /**
-   * 🔄 Memulai stream untuk pembaruan lokasi.
-   */
-  /**
-   * 🔄 Memulai stream untuk pembaruan lokasi.
-   * 🔥 FIX: Menggunakan pendekatan defensive programming untuk Web
-   */
   void startLocationUpdates() async {
     if (_currentUserId == null || _authToken == null) return;
 
@@ -306,11 +290,7 @@ class HomeViewModel extends ChangeNotifier {
       locationSettings: locationSettings,
     ).handleError((error) {
       debugPrint("⚠️ Error pada Stream Lokasi: $error");
-    })
-        // .distinct() // ⚠️ FIX: Distinct dimatikan dulu untuk mencegah error perbandingan tipe data object
-
-        // 3. 🔥 FIX: Terima sebagai 'dynamic' dulu, jangan langsung 'Position'
-        .listen((dynamic position) {
+    }).listen((dynamic position) {
       // Cek apakah data benar-benar Position
       if (position is Position) {
         _userLocation = LatLng(position.latitude, position.longitude);
@@ -365,8 +345,6 @@ class HomeViewModel extends ChangeNotifier {
       );
       debugPrint("🚫 Sharing dimatikan");
     } else {
-      // HIDUPKAN SHARING
-      // 🔥 FIX: Gunakan safe determine position di sini juga
       try {
         final pos = await _safeDeterminePosition();
         _userLocation = LatLng(pos.latitude, pos.longitude);
@@ -390,10 +368,6 @@ class HomeViewModel extends ChangeNotifier {
     safeNotifyListeners();
   }
 
-  // ... (Sisa kode ke bawah SAMA PERSIS, tidak ada perubahan)
-  // fetchFriends, fetchFriendLocations, searchLocation, dll...
-
-  // ====== Fetch Friends ======
   // ====== Fetch Friends ======
   Future<void> fetchFriends() async {
     if (_authToken == null) return;
@@ -410,8 +384,6 @@ class HomeViewModel extends ChangeNotifier {
 
       filterFriendsByGroup(_currentGroupId);
 
-      // 🔥 TAMBAHKAN BARIS INI:
-      // Tempelkan kembali data lokasi yang tersimpan di cache ke object teman yang baru
       updateFriendLocationsOnMap();
     } catch (e) {
       debugPrint('Gagal mengambil daftar teman: $e');
@@ -740,6 +712,24 @@ class HomeViewModel extends ChangeNotifier {
 
     return event;
   }
+  // Di dalam class HomeViewModel
+
+  String getCreatorName(int creatorId) {
+    // 1. Cek apakah creator adalah User yang sedang login
+    if (_currentUserId != null && creatorId == _currentUserId) {
+      return "Anda"; // Atau ambil dari _currentUserName
+    }
+
+    // 2. Cari di list _friends (yang isinya member grup saat ini)
+    // Kita pakai lookup sederhana
+    try {
+      final creator = _friends.firstWhere((friend) => friend.id == creatorId);
+      return creator.name ?? "Tanpa Nama";
+    } catch (e) {
+      // 3. Fallback jika user tidak ditemukan di list (misal user sudah left group tapi event masih ada)
+      return "Mantan Anggota";
+    }
+  }
 
   Future<void> joinEvent(int eventId) async {
     if (_authToken == null) return;
@@ -788,18 +778,8 @@ extension HomeViewModelRefresh on HomeViewModel {
   /// 🔄 Smart Refresh: Tidak bikin layar putih & Urutan Data Benar
   Future<void> refreshData() async {
     if (_authToken == null || _currentUserId == null) return;
-
-    // ❌ JANGAN set _isLoading = true di sini!
-    // Biarkan UI lama tetap tampil. Indikator loading cukup dari RefreshIndicator/Tombol.
-
-    // Kita pakai flag lokal atau state khusus jika perlu, tapi untuk refresh,
-    // biarkan user melihat data lama sampai data baru "pop" muncul.
-
     try {
       debugPrint("🔹 Refresh dimulai: Mengambil Grup dulu...");
-
-      // 1. LANGKAH KRITIS: Ambil Grup DULUAN (Serial)
-      // Kita harus pastikan grup terupdate sebelum minta data teman/event
       await fetchGroups();
 
       // Pastikan ada grup yang dipilih
@@ -812,9 +792,6 @@ extension HomeViewModelRefresh on HomeViewModel {
       }
 
       debugPrint("🔹 Grup OK (ID: $groupId). Mengambil data paralel...");
-
-      // 2. LANGKAH PARALEL: Ambil sisa data SEKALIGUS
-      // Profil, Lokasi Teman, dan (Teman + Event berdasarkan Grup ID tadi)
       await Future.wait([
         loadUserProfile(),
         fetchFriendLocations(_authToken!),
@@ -831,10 +808,6 @@ extension HomeViewModelRefresh on HomeViewModel {
           })
         ]
       ]);
-
-      // 3. GPS (Fire and Forget)
-      // Jalankan GPS di background saja, jangan tunggu dia selesai untuk menyelesaikan refresh
-      // Ini bikin refresh terasa "instan"
       _getCurrentUserPositionOnce().then((_) {
         debugPrint("📍 GPS Refreshed (Background)");
       }).catchError((e) {

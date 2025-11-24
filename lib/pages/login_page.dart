@@ -356,7 +356,7 @@ class _LoginView extends StatelessWidget {
                                                 MainAxisAlignment.center,
                                             children: [
                                               Image.asset(
-                                                '../assets/images/google.png',
+                                                'assets/images/google.png',
                                                 height: 28,
                                                 width: 28,
                                               ),
