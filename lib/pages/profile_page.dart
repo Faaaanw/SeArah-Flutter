@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:searah_backend/pages/login_page.dart';
+import 'package:searah_backend/viewmodel/home_viewmodel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:searah_backend/models/user_model.dart';
 import 'package:searah_backend/services/api_services.dart';
+import 'package:provider/provider.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -52,24 +54,34 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  // Di dalam class _ProfilePageState
   Future<void> logoutUser() async {
+    // 1. Dapatkan View Model
+    // Gunakan listen: false karena kita tidak ingin widget ini me-rebuild saat VM berubah
+    final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
+
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token');
 
+    // 2. 🛑 PANGGIL CLEAR SESSION DI HOMEVIEWMODEL 🛑
+    // Ini akan menghentikan semua timer, streaming GPS, dan polling teman.
+    homeViewModel.clearSession(); // 🔥 PENTING!
+
+    // 3. Panggil API Logout (optional)
     if (token != null) {
       try {
         await ApiService.logout(token);
       } catch (e) {
-        print("Logout API error: $e");
+        print("Logout API error (Token sudah dihapus di sisi klien): $e");
       }
     }
 
-    // Hapus semua data session
+    // 4. Hapus semua data session lokal
     await prefs.clear();
 
     if (!mounted) return;
 
-    // Arahkan ke LoginPage, hapus semua history
+    // 5. Arahkan ke LoginPage, hapus semua history
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const LoginPageWidget()),

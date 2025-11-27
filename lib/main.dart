@@ -19,7 +19,7 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => HomeViewModel()),
-        ChangeNotifierProvider(create: (_) => FriendViewModel()), // ✅ Tambahkan ini
+        ChangeNotifierProvider(create: (_) => FriendViewModel()),
       ],
       child: MyApp(
         isLoggedIn: token != null && userId != null,

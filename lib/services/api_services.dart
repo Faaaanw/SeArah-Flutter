@@ -212,6 +212,13 @@ class ApiService {
       } else {
         return [];
       }
+    } else if (res.statusCode == 401) {
+      // 🔥 PERBAIKAN DI SINI:
+      // Jika Unauthorized (401), kembalikan list kosong, dan hentikan logging error ke console
+      // agar console tidak penuh, karena ini adalah expected behavior setelah logout.
+      print(
+          "⚠️ Status 401 Diterima: Token tidak valid. Abaikan. (Di dalam ApiService)");
+      return [];
     } else {
       throw Exception('Gagal mengambil lokasi teman: ${res.body}');
     }

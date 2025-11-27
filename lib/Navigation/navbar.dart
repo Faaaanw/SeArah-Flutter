@@ -1,6 +1,7 @@
 // File: lib/pages/main_navigation.dart
 import 'package:flutter/material.dart';
 import 'package:searah_backend/pages/dashboard_page.dart';
+import 'package:searah_backend/pages/home_page.dart';
 import 'package:searah_backend/pages/friends_page.dart';
 import 'package:searah_backend/pages/notification_page.dart';
 import 'package:searah_backend/pages/profile_page.dart';
@@ -20,8 +21,8 @@ class _NavbarState extends State<Navbar> {
   int _currentIndex = 0;
 
   final List<Widget> _pages = const [
+    DashboardPage(),
     HomePageWidget(),
-    NotificationPage(),
     FriendsPage(),
     ProfilePage(),
   ];
@@ -40,9 +41,9 @@ class _NavbarState extends State<Navbar> {
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.map_outlined), label: 'Map'),
+          BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
           BottomNavigationBarItem(
-              icon: Icon(Icons.notifications_outlined), label: 'Notifications'),
+              icon: Icon(Icons.map_outlined), label: 'Map'),
           BottomNavigationBarItem(
               icon: Icon(Icons.menu_book_outlined), label: 'Friends'),
           BottomNavigationBarItem(

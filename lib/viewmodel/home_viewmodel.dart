@@ -9,6 +9,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class HomeViewModel extends ChangeNotifier {
   // ====== State Utama ======
@@ -23,6 +25,7 @@ class HomeViewModel extends ChangeNotifier {
   List<Friend> eventMembers = [];
   Event? _currentEvent;
   Event? get currentEvent => _currentEvent;
+  Timer? _locationTimer;
 
   void setCurrentEvent(Event? event) {
     _currentEvent = event;
@@ -94,12 +97,25 @@ class HomeViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _positionSubscription?.cancel();
-    _friendUpdateTimer?.cancel();
-    _debounceSendLocation?.cancel();
-    _debounceSearch?.cancel();
+
+    // 🔥 Panggil fungsi pembatalan terpusat sebelum dispose
+    stopAllBackgroundUpdates();
+
     searchController.dispose();
     super.dispose();
+  }
+
+  void startLocationPolling() {
+    _locationTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      // ... panggil ApiService.getFriendLocations(...)
+    });
+  }
+
+  // 🔥 FUNGSI BARU UNTUK MENGHENTIKAN TIMER:
+  void stopLocationPolling() {
+    _locationTimer?.cancel();
+    _locationTimer = null;
+    print("✅ Polling Lokasi Teman Dihentikan.");
   }
 
   // ====== Setter (dipanggil setelah login) ======
@@ -111,6 +127,8 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   void clearSession() {
+    stopAllBackgroundUpdates(); // ⛔ Hentikan semua polling/stream sebelum menghapus token.
+
     _currentUserId = null;
     _authToken = null;
     _friends = [];
@@ -119,8 +137,6 @@ class HomeViewModel extends ChangeNotifier {
     _isUserSharingLocation = true;
     isLoadingFriends = false;
     _isLoadingGroups = false;
-    _positionSubscription?.cancel();
-    _friendUpdateTimer?.cancel();
     safeNotifyListeners();
   }
 
@@ -180,6 +196,7 @@ class HomeViewModel extends ChangeNotifier {
   // ====== Load Semua Data Awal ======
   Future<void> loadInitialData() async {
     await fetchFriendLocations(_authToken!);
+    setupNotifications();
 
     if (!_isUserSharingLocation) {
       _userLocation = LatLng(0, 0);
@@ -579,6 +596,32 @@ class HomeViewModel extends ChangeNotifier {
     safeNotifyListeners();
   }
 
+  Future<List<dynamic>> searchLocationDirectly(String query) async {
+    if (query.isEmpty) return [];
+
+    try {
+      // Cek cache dulu jika ada
+      if (_searchCache.containsKey(query)) {
+        return _sortByDistance(_searchCache[query]!);
+      }
+
+      // Panggil API
+      final results = await ApiService.searchLocation(
+        query,
+        lat: _userLocation.latitude,
+        lon: _userLocation.longitude,
+      );
+
+      // Simpan ke cache
+      _searchCache[query] = results;
+
+      return _sortByDistance(results);
+    } catch (e) {
+      debugPrint('Error searchLocationDirectly: $e');
+      return [];
+    }
+  }
+
   void startFriendLocationUpdates() {
     _friendUpdateTimer?.cancel();
     _friendUpdateTimer = Timer.periodic(const Duration(seconds: 15), (_) {
@@ -622,6 +665,20 @@ class HomeViewModel extends ChangeNotifier {
     clearSearchMarker();
     mapController.move(userLocation, 15.0);
     safeNotifyListeners();
+  }
+
+  void stopAllBackgroundUpdates() {
+    stopLocationPolling(); // (Fungsi ini sudah ada di kode Anda)
+
+    // ⛔ BATALKAN SEMUA TIMER UPDATE BERKALA
+    _positionSubscription?.cancel();
+    _positionSubscription = null;
+    _friendUpdateTimer?.cancel();
+    _friendUpdateTimer = null;
+    _debounceSendLocation?.cancel();
+    _debounceSearch?.cancel();
+
+    debugPrint("🛑 Semua background update (GPS, Teman, Timer) DIHENTIKAN.");
   }
 
   void clearSearchMarker() {
@@ -771,6 +828,126 @@ class HomeViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  // 🔥 FUNGSI BARU: SETUP NOTIFIKASI
+  Future<void> setupNotifications() async {
+    if (_authToken == null) return;
+
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+    // A. Minta Izin (Android 13+ & iOS)
+    NotificationSettings settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      // B. Ambil Token HP & Kirim ke Backend Laravel
+      String? fcmToken = await messaging.getToken();
+      print("🔥 FCM TOKEN HP SAYA: $fcmToken");
+
+      if (fcmToken != null) {
+        await ApiService.updateFcmToken(fcmToken, _authToken!);
+      }
+
+      // C. Listener saat Aplikasi DIBUKA (Foreground)
+      // Agar notifikasi muncul "cling" saat app sedang jalan
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        RemoteNotification? notification = message.notification;
+        AndroidNotification? android = message.notification?.android;
+
+        if (notification != null && android != null) {
+          final FlutterLocalNotificationsPlugin
+              flutterLocalNotificationsPlugin =
+              FlutterLocalNotificationsPlugin();
+
+          flutterLocalNotificationsPlugin.show(
+            notification.hashCode,
+            notification.title,
+            notification.body,
+            const NotificationDetails(
+              android: AndroidNotificationDetails(
+                'high_importance_channel', // ID Channel (Harus sama dgn main.dart)
+                'High Importance Notifications',
+                importance: Importance.high,
+                priority: Priority.high,
+                icon: '@mipmap/ic_launcher',
+              ),
+            ),
+          );
+
+          // Refresh data (opsional)
+          refreshData();
+        }
+      });
+    }
+  }
+
+  String _formatDistance(double meters) {
+    if (meters < 1000) {
+      return "${meters.toStringAsFixed(0)}m";
+    } else {
+      return "${(meters / 1000).toStringAsFixed(1)}km";
+    }
+  }
+
+  /// 1. Hitung Jarak User ke Teman
+  String getDistanceToFriend(Friend friend) {
+    // Jika teman tidak share lokasi atau koordinat null
+    if (!friend.isSharingLocation ||
+        friend.latitude == null ||
+        friend.longitude == null) {
+      return "Lokasi tidak tersedia";
+    }
+
+    // Hitung jarak menggunakan LatLng user saat ini vs LatLng teman
+    final double meterDist = _distance.as(
+      LengthUnit.Meter,
+      _userLocation, // Lokasi User (Realtime GPS)
+      LatLng(
+          friend.latitude!, friend.longitude!), // Lokasi Teman (Dari Backend)
+    );
+
+    return _formatDistance(meterDist);
+  }
+
+  /// 2. Hitung Jarak User ke Event
+  String getDistanceToEvent(Event event) {
+    // Validasi koordinat event
+    if (event.locationLatitude == 0 && event.locationLongitude == 0) {
+      return "Lokasi Online/TBD";
+    }
+
+    final double meterDist = _distance.as(
+      LengthUnit.Meter,
+      _userLocation,
+      LatLng(event.locationLatitude, event.locationLongitude),
+    );
+
+    return _formatDistance(meterDist);
+  }
+
+  /// 3. Ambil Object Friend berdasarkan ID Peserta Event
+  /// Mengubah list ID (ex: [1, 5, 8]) menjadi List<Friend> lengkap dengan Foto & Nama
+  List<Friend> getEventParticipantsData(Event event) {
+    if (event.participants.isEmpty) return [];
+
+    // Cari teman di list _allFriends yang ID-nya ada di event.participants
+    // Kita pakai _allFriends agar bisa mendeteksi teman meski beda grup,
+    // atau pakai _friends jika ingin strict satu grup.
+    List<Friend> members = _allFriends
+        .where((friend) => event.participants.contains(friend.id))
+        .toList();
+
+    // Tambahkan diri sendiri jika join (opsional, karena user login mungkin tidak ada di list friends)
+    if (event.participants.contains(_currentUserId)) {
+      // Logic jika ingin menampilkan foto diri sendiri di list peserta
+      // Bisa handle manual di UI atau tambahkan object dummy Friend di sini
+    }
+
+    return members;
   }
 }
 

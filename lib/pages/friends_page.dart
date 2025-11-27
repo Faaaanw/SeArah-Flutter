@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../viewmodel/friend_viewmodel.dart'; // Pastikan path ini benar
+import '../viewmodel/friend_viewmodel.dart';
 import 'package:quickalert/quickalert.dart';
 
 class FriendsPage extends StatefulWidget {
@@ -18,17 +18,15 @@ class _FriendsPageState extends State<FriendsPage> {
   List<Map<String, dynamic>> searchResults = [];
   List<Map<String, dynamic>> pendingRequests = [];
   bool isSearching = false;
-  // showPending: false for Daftar Teman, true for Permintaan Masuk
-  bool showPending = false;
 
-  // Warna tema
-  static const Color primaryColor = Color(0xFFFA8B60); // Orange-Red/Coral
-  static const Color secondaryColor =
-      Colors.teal; // Teal/Green for actions/requests
-  static const Color backgroundColor = Color(0xFFF7F7F7); // Light background
+  // --- Palette Warna Modern ---
+  static const Color primaryColor = Color(0xFFFA8B60); // Coral
+  static const Color secondaryColor = Color(0xFF4DB6AC); // Soft Teal
+  static const Color backgroundColor = Color(0xFFF9FAFB); // Very Light Grey
   static const Color cardColor = Colors.white;
+  static const Color textDark = Color(0xFF2D3142);
+  static const Color textLight = Color(0xFF9CA3AF);
 
-  // Nama font Poppins
   static const String fontName = 'Poppins';
 
   @override
@@ -58,11 +56,11 @@ class _FriendsPageState extends State<FriendsPage> {
 
   Future<void> _searchByName(BuildContext context, String name) async {
     if (name.isEmpty || token == null) return;
-    FocusScope.of(context).unfocus(); // Close keyboard
+    FocusScope.of(context).unfocus();
 
     setState(() {
       isSearching = true;
-      searchResults = []; // Clear previous search results
+      searchResults = [];
     });
 
     final viewModel = context.read<FriendViewModel>();
@@ -74,269 +72,519 @@ class _FriendsPageState extends State<FriendsPage> {
     });
 
     if (results == null || results.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Pengguna tidak ditemukan.',
-                style: TextStyle(fontFamily: fontName))),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: textDark,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            content: const Text('Pengguna tidak ditemukan.',
+                style: TextStyle(fontFamily: fontName)),
+          ),
+        );
+      }
     }
   }
 
-  Widget _buildCustomHeader(BuildContext context, FriendViewModel viewModel) {
+  // --- WIDGETS ---
+
+  Widget _buildCustomHeader() {
     return Padding(
-      padding: const EdgeInsets.only(
-          top: 16.0, left: 16.0, right: 16.0, bottom: 8.0),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Tombol Back (gunakan ikon panah dari referensi foto 1)
-          Container(
-            decoration: BoxDecoration(
-              color: cardColor,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.grey.shade300,
-                    blurRadius: 5,
-                    offset: const Offset(0, 2)),
-              ],
-            ),
-            
+          // Back Button
+          _buildCircleButton(
+            icon: Icons.arrow_back_ios_new_rounded,
+            onTap: () => Navigator.pop(context),
           ),
 
           const Text(
-            'Your Friends',
+            'Friend Zone',
             style: TextStyle(
-              fontFamily: fontName, // Poppins
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color:primaryColor,
+              fontFamily: fontName,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: textDark,
+              letterSpacing: 0.5,
             ),
           ),
 
-          // Tombol Refresh
-          Container(
-            decoration: BoxDecoration(
-              color: cardColor,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.grey.shade300,
-                    blurRadius: 5,
-                    offset: const Offset(0, 2)),
-              ],
-            ),
-           
+          // Refresh Button
+          _buildCircleButton(
+            icon: Icons.refresh_rounded,
+            onTap: _initData,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSegmentedControl() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+  Widget _buildCircleButton(
+      {required IconData icon, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(50),
       child: Container(
-        padding: const EdgeInsets.all(4.0),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(16),
+          color: Colors.white,
+          shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-                color: Colors.grey.shade200,
-                blurRadius: 8,
-                offset: const Offset(0, 4)),
-          ],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: _buildSegmentButton(
-                title: "Daftar Teman",
-                isSelected: !showPending,
-                onPressed: () => setState(() {
-                  showPending = false;
-                  searchResults =
-                      []; // Clear search results when switching back
-                }),
-                activeColor: primaryColor,
-              ),
-            ),
-            Expanded(
-              child: _buildSegmentButton(
-                title: "Permintaan Masuk",
-                isSelected: showPending,
-                onPressed: () => setState(() => showPending = true),
-                activeColor: primaryColor,
-              ),
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
+        child: Icon(icon, color: textDark, size: 20),
       ),
     );
   }
 
-  Widget _buildSegmentButton({
-    required String title,
-    required bool isSelected,
-    required VoidCallback onPressed,
-    required Color activeColor,
-  }) {
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? activeColor : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Center(
-          child: Text(
-            title,
-            style: TextStyle(
-              fontFamily: fontName, // Poppins
-              color: isSelected ? Colors.white : Colors.black87,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              fontSize: 14,
-            ),
+  Widget _buildTabBar() {
+    return Container(
+      height: 55,
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade200,
+            blurRadius: 10,
+            offset: const Offset(0, 5),
           ),
+        ],
+      ),
+      child: TabBar(
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: Colors.transparent,
+        indicatorPadding: const EdgeInsets.all(6),
+        indicator: BoxDecoration(
+          color: primaryColor,
+          borderRadius: BorderRadius.circular(25),
+          boxShadow: [
+            BoxShadow(
+              color: primaryColor.withOpacity(0.4),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            )
+          ],
         ),
+        labelColor: Colors.white,
+        unselectedLabelColor: textLight,
+        labelStyle: const TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w600,
+          fontSize: 14,
+        ),
+        tabs: const [
+          Tab(text: "Teman"),
+          Tab(text: "Cari"),
+          Tab(text: "Request"),
+        ],
       ),
     );
   }
 
-  // Widget untuk menampilkan list item teman atau permintaan dengan visual yang ditingkatkan
   Widget _buildFriendListItem(Map<String, dynamic> item,
-      {required bool isPending}) {
-    final viewModel = context.read<FriendViewModel>();
+      {required bool isPending, required bool isSearch}) {
+    final viewModel = context.watch<FriendViewModel>();
+
+    // Parsing Data
     final name = item['name'] ?? item['from_name'] ?? 'Tanpa Nama';
     final email = item['email'] ?? item['from_email'] ?? '-';
-    final id = item['id'];
 
-    // Gradasi warna untuk card, berdasarkan mode
-    final Color cardStartColor = isPending
-        ? secondaryColor.withOpacity(0.1)
-        : primaryColor.withOpacity(0.1);
-    final Color cardEndColor = isPending
-        ? secondaryColor.withOpacity(0.0)
-        : primaryColor.withOpacity(0.0);
+    // ID Handling
+    final int targetUserId =
+        isPending ? (item['from_id'] ?? item['user_id'] ?? 0) : item['id'];
+    final int? itemId = item['id'];
 
-    // Warna aksen untuk avatar dan tombol
-    final Color accentColor = isPending ? secondaryColor : primaryColor;
+    // --- DEKLARASI VARIABEL (Tambahkan isDisabled di sini) ---
+    bool isDisabled = false; // <--- INI YANG KURANG
+    bool showActionButton = false;
+    String actionLabel = "";
+    IconData actionIcon = Icons.check;
+    Color buttonColor = primaryColor;
+    // Unused: Color textColor = Colors.white;
+    VoidCallback? onActionTap;
 
-    // Cek apakah ini hasil pencarian yang belum berteman (untuk tombol Tambah)
-    final bool isSearchResultAndNotFriend =
-        searchResults.contains(item) && item['id'] != userId;
+    // --- LOGIKA UTAMA ---
+    if (isPending) {
+      // 1. Tab Permintaan Masuk
+      showActionButton = true;
+      actionLabel = "Terima";
+      actionIcon = Icons.check_circle_outline;
+      buttonColor = secondaryColor; // Gunakan variable local secondaryColor
+      onActionTap = () async {
+        if (token == null || itemId == null) return;
+        await _handleAcceptFriend(viewModel, itemId!);
+      };
+    } else if (isSearch && targetUserId != userId) {
+      // 2. Tab Pencarian
+      showActionButton = true;
 
-    // Cek apakah ini tombol yang harus ditampilkan
-    final bool showActionButton = isPending || isSearchResultAndNotFriend;
+      // Cek A: Apakah sudah berteman?
+      if (viewModel.isAlreadyFriend(targetUserId)) {
+        actionLabel = "Berteman";
+        actionIcon = Icons.people_alt_outlined;
+        buttonColor = Colors.grey.shade300;
+        isDisabled = true; // Set tombol jadi non-aktif
+      }
+      // Cek B: Apakah dia sudah add kita duluan (Followback)?
+      else {
+        int? incomingFriendshipId =
+            viewModel.getIncomingRequestFriendshipId(targetUserId);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Container(
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.shade200,
-              blurRadius: 10,
-              offset: const Offset(0, 5),
-            ),
-          ],
-          gradient: LinearGradient(
-            colors: [cardStartColor, cardEndColor],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+        if (incomingFriendshipId != null) {
+          // Kasus Followback
+          actionLabel = "Terima";
+          actionIcon = Icons.check_circle;
+          buttonColor = secondaryColor;
+          onActionTap = () async {
+            if (token == null) return;
+            await _handleAcceptFriend(viewModel, incomingFriendshipId);
+          };
+        } else {
+          // Kasus Tambah Teman Baru
+          actionLabel = "Tambah";
+          actionIcon = Icons.person_add_outlined;
+          buttonColor = primaryColor;
+          onActionTap = () async {
+            if (token == null || userId == null) return;
+            await _handleAddFriend(viewModel, targetUserId);
+          };
+        }
+      }
+    }
+
+    // --- RENDER UI ---
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFE0E0E0).withOpacity(0.5),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
           ),
-        ),
-        child: ListTile(
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          leading: Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: accentColor.withOpacity(0.3), width: 2),
-            ),
-            child: CircleAvatar(
-              radius: 20,
-              backgroundColor: accentColor,
-              child: const Icon(Icons.person, color: Colors.white, size: 24),
-            ),
-          ),
-          title: Text(
-            name,
-            style: const TextStyle(
-                fontFamily: fontName, // Poppins
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: Colors.black87),
-          ),
-          subtitle: Text(
-            email,
-            style: TextStyle(
-                fontFamily: fontName,
-                color: Colors.grey.shade600,
-                fontSize: 12),
-          ),
-          trailing: showActionButton
-              ? ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: accentColor,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                    elevation: 3,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    minimumSize: const Size(90, 40),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              // Avatar
+              Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: (isDisabled ? Colors.grey : buttonColor)
+                        .withOpacity(0.3),
+                    width: 2,
                   ),
-                  onPressed: () async {
-                    if (token == null || id == null) return;
+                ),
+                child: CircleAvatar(
+                  radius: 24,
+                  backgroundColor:
+                      (isDisabled ? Colors.grey : buttonColor).withOpacity(0.1),
+                  child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      fontFamily: fontName,
+                      fontWeight: FontWeight.bold,
+                      color: isDisabled ? Colors.grey : buttonColor,
+                      fontSize: 18,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
 
-                    String? message;
-                    if (isPending) {
-                      // Terima Permintaan
-                      message = await viewModel.acceptFriend(
-                        friendshipId: id,
-                        token: token!,
-                      );
-                      _initData(); // Reload data after accepting
-                    } else if (isSearchResultAndNotFriend) {
-                      // Tambah Teman (dari hasil pencarian)
-                      if (userId == null) return;
-                      message = await viewModel.addFriend(
-                        userId: userId!,
-                        friendId: id,
-                        token: token!,
-                      );
-                      // Clear search results after sending request
-                      setState(() {
-                        searchResults = [];
-                        friendIdController.clear();
-                      });
-                    }
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                          content: Text(
-                              message ??
-                                  (isPending
-                                      ? 'Permintaan diterima.'
-                                      : 'Permintaan dikirim.'),
-                              style: const TextStyle(
-                                  fontFamily: fontName))), // Poppins
-                    );
-                  },
-                  child: Text(isPending ? "Terima" : "Tambah",
+              // Text Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
                       style: const TextStyle(
-                          fontFamily: fontName, // Poppins
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold)),
-                )
-              : null,
+                        fontFamily: fontName,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        color: textDark,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      email,
+                      style: const TextStyle(
+                        fontFamily: fontName,
+                        fontSize: 12,
+                        color: textLight,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+
+              // Action Button
+              if (showActionButton)
+                InkWell(
+                  onTap: isDisabled ? null : onActionTap,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isDisabled
+                          ? Colors.transparent
+                          : buttonColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: isDisabled
+                          ? Border.all(color: Colors.grey.shade300)
+                          : null,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          actionIcon,
+                          size: 18,
+                          color: isDisabled ? Colors.grey : buttonColor,
+                        ),
+                        if (actionLabel.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            actionLabel,
+                            style: TextStyle(
+                              fontFamily: fontName,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: isDisabled ? Colors.grey : buttonColor,
+                            ),
+                          ),
+                        ]
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Future<void> _handleAcceptFriend(FriendViewModel vm, int friendshipId) async {
+    final msg =
+        await vm.acceptFriend(friendshipId: friendshipId, token: token!);
+    if (mounted) _showSuccessAlert(msg ?? "Permintaan diterima");
+    // Refresh UI search result agar tombol berubah jadi "Berteman"
+    setState(() {});
+  }
+
+  Future<void> _handleAddFriend(FriendViewModel vm, int targetId) async {
+    final msg =
+        await vm.addFriend(userId: userId!, friendId: targetId, token: token!);
+    if (mounted) _showSuccessAlert(msg ?? "Permintaan dikirim");
+    // Clear search atau update UI sesuai kebutuhan
+    setState(() {
+      friendIdController.clear();
+      searchResults = [];
+    });
+  }
+
+  void _showSuccessAlert(String message) {
+    QuickAlert.show(
+      context: context,
+      type: QuickAlertType.success,
+      title: 'Sukses',
+      text: message,
+      confirmBtnColor: primaryColor,
+    );
+  }
+
+  // --- TAB CONTENTS ---
+
+  Widget _buildEmptyState(String title, String subtitle, IconData icon) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(25),
+            decoration: BoxDecoration(
+              color: primaryColor.withOpacity(0.05),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 60, color: primaryColor.withOpacity(0.5)),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            title,
+            style: const TextStyle(
+              fontFamily: fontName,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: textDark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontFamily: fontName,
+              fontSize: 14,
+              color: textLight,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFriendsTab(FriendViewModel viewModel) {
+    if (viewModel.friends.isEmpty) {
+      return _buildEmptyState(
+          "Sepi banget...",
+          "Kamu belum punya teman.\nAyo cari teman barumu sekarang!",
+          Icons.group_off_rounded);
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 10, bottom: 20),
+      itemCount: viewModel.friends.length,
+      itemBuilder: (context, index) {
+        return _buildFriendListItem(viewModel.friends[index],
+            isPending: false, isSearch: false);
+      },
+    );
+  }
+
+  Widget _buildAddFriendTab() {
+    return Column(
+      children: [
+        // Modern Search Bar
+        Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.shade200,
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: TextField(
+              controller: friendIdController,
+              style: const TextStyle(fontFamily: fontName, color: textDark),
+              decoration: InputDecoration(
+                hintText: "Ketik nama teman...",
+                hintStyle:
+                    const TextStyle(fontFamily: fontName, color: textLight),
+                prefixIcon:
+                    const Icon(Icons.search_rounded, color: primaryColor),
+                suffixIcon: Container(
+                  margin: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: primaryColor,
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_forward_rounded,
+                        color: Colors.white, size: 20),
+                    onPressed: () =>
+                        _searchByName(context, friendIdController.text.trim()),
+                  ),
+                ),
+                border: InputBorder.none,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              ),
+              onSubmitted: (value) => _searchByName(context, value.trim()),
+            ),
+          ),
+        ),
+
+        // Search Results
+        Expanded(
+          child: isSearching
+              ? const Center(
+                  child: CircularProgressIndicator(color: primaryColor))
+              : searchResults.isEmpty
+                  ? Center(
+                      child: SingleChildScrollView(
+                        // Prevent overflow on small screens
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (friendIdController.text.isNotEmpty)
+                              _buildEmptyState(
+                                  "Tidak Ditemukan",
+                                  "Coba cari dengan nama lain.",
+                                  Icons.search_off_rounded)
+                            else
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 40),
+                                child: Image.network(
+                                  'https://cdn-icons-png.flaticon.com/512/7486/7486747.png', // Illustrasi simple
+                                  height: 150,
+                                  color: Colors.grey.shade200,
+                                  colorBlendMode: BlendMode.srcATop,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const SizedBox(),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 20),
+                      itemCount: searchResults.length,
+                      itemBuilder: (context, index) {
+                        return _buildFriendListItem(searchResults[index],
+                            isPending: false, isSearch: true);
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRequestsTab() {
+    if (pendingRequests.isEmpty) {
+      return _buildEmptyState(
+          "Tidak ada permintaan",
+          "Belum ada yang ingin berteman\ndenganmu saat ini.",
+          Icons.mark_email_read_outlined);
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 10, bottom: 20),
+      itemCount: pendingRequests.length,
+      itemBuilder: (context, index) {
+        return _buildFriendListItem(pendingRequests[index],
+            isPending: true, isSearch: false);
+      },
     );
   }
 
@@ -344,160 +592,26 @@ class _FriendsPageState extends State<FriendsPage> {
   Widget build(BuildContext context) {
     return Consumer<FriendViewModel>(
       builder: (context, viewModel, _) {
-        return Scaffold(
-          backgroundColor: backgroundColor,
-          body: SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. Custom Header (Non-AppBar)
-                _buildCustomHeader(context, viewModel),
-
-                // 2. Segmented Control (Daftar Teman / Permintaan Masuk)
-                _buildSegmentedControl(),
-
-                // 3. Search Section (Hanya tampil saat Daftar Teman aktif)
-                if (!showPending)
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    child: Row(
+        return DefaultTabController(
+          length: 3,
+          child: Scaffold(
+            backgroundColor: backgroundColor,
+            body: SafeArea(
+              child: Column(
+                children: [
+                  _buildCustomHeader(),
+                  _buildTabBar(),
+                  Expanded(
+                    child: TabBarView(
                       children: [
-                        Expanded(
-                          child: TextField(
-                            controller: friendIdController,
-                            style: const TextStyle(
-                                fontFamily: fontName), // Poppins
-                            decoration: InputDecoration(
-                              hintText: "Cari ID atau Nama Teman",
-                              hintStyle: TextStyle(
-                                  fontFamily: fontName, // Poppins
-                                  color: Colors.grey.shade400),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide:
-                                    BorderSide(color: Colors.grey.shade300),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: primaryColor, width: 2),
-                              ),
-                              filled: true,
-                              fillColor: cardColor,
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 12),
-                            ),
-                            onSubmitted: (value) =>
-                                _searchByName(context, value.trim()),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Search Button
-                        Container(
-                          decoration: BoxDecoration(
-                            color: primaryColor,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: primaryColor.withOpacity(0.3),
-                                blurRadius: 5,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: IconButton(
-                            icon: const Icon(Icons.search, color: Colors.white),
-                            onPressed: () => _searchByName(
-                              context,
-                              friendIdController.text.trim(),
-                            ),
-                            tooltip: 'Cari',
-                          ),
-                        ),
+                        _buildFriendsTab(viewModel),
+                        _buildAddFriendTab(),
+                        _buildRequestsTab(),
                       ],
                     ),
                   ),
-
-                if (isSearching)
-                  Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Center(
-                        child: CircularProgressIndicator(color: primaryColor)),
-                  ),
-
-                // 4. List View Section
-                Expanded(
-                  child: Builder(
-                    builder: (context) {
-                      if (isSearching)
-                        return const SizedBox
-                            .shrink(); // Hide list while searching
-
-                      if (showPending) {
-                        // ======= PERMINTAAN MASUK =======
-                        if (pendingRequests.isEmpty) {
-                          return const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(32.0),
-                              child: Text(
-                                "You have no pending friend requests.",
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    fontFamily: fontName,
-                                    color: Colors.grey), // Poppins
-                              ),
-                            ),
-                          );
-                        }
-                        return ListView.builder(
-                          padding: const EdgeInsets.only(top: 8, bottom: 16),
-                          itemCount: pendingRequests.length,
-                          itemBuilder: (context, index) {
-                            return _buildFriendListItem(pendingRequests[index],
-                                isPending: true);
-                          },
-                        );
-                      } else {
-                        // ======= DAFTAR TEMAN / HASIL PENCARIAN =======
-                        final isSearchActive = searchResults.isNotEmpty;
-                        final listToDisplay =
-                            isSearchActive ? searchResults : viewModel.friends;
-
-                        if (listToDisplay.isEmpty) {
-                          return Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(32.0),
-                              child: Text(
-                                isSearchActive
-                                    ? "zzz No result for '${friendIdController.text}'."
-                                    : "You dont have any friends yet. Start adding some!",
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                    fontFamily: fontName,
-                                    color: Colors.grey), // Poppins
-                              ),
-                            ),
-                          );
-                        }
-
-                        return ListView.builder(
-                          padding: const EdgeInsets.only(top: 8, bottom: 16),
-                          itemCount: listToDisplay.length,
-                          itemBuilder: (context, index) {
-                            return _buildFriendListItem(listToDisplay[index],
-                                isPending: false);
-                          },
-                        );
-                      }
-                    },
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );

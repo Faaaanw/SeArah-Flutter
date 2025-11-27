@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:searah_backend/Navigation/navbar.dart';
-import 'package:searah_backend/pages/dashboard_page.dart';
+import 'package:searah_backend/pages/home_page.dart';
 import 'package:searah_backend/pages/register_page.dart';
 import 'package:searah_backend/viewmodel/home_viewmodel.dart';
 import '../services/api_services.dart';
@@ -28,11 +28,41 @@ class LoginViewModel extends ChangeNotifier {
 
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     clientId:
-        "977543867365-oqbmmmqtmdat1vsl2oud0srqr1v70prc.apps.googleusercontent.com", // Web Client ID dari Google Console
+        "977543867365-oqbmmmqtmdat1vsl2oud0srqr1v70prc.apps.googleusercontent.com", // Web Client ID
     scopes: ['email', 'profile', 'openid'],
   );
 
+  // Fungsi untuk menampilkan pop-up hasil
+  // Di dalam class LoginViewModel
+  void _showResultDialog(BuildContext context, String title, String message,
+      {bool isSuccess = false}) {
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(isSuccess ? Icons.check_circle : Icons.error,
+                  color: isSuccess ? Colors.green : Colors.red),
+              const SizedBox(width: 8),
+              Text(title),
+            ],
+          ),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   // ===== Login Email/Password =====
+  // Di dalam class LoginViewModel
   Future<void> login(BuildContext context) async {
     if (_isLoading) return;
     _isLoading = true;
@@ -43,25 +73,31 @@ class LoginViewModel extends ChangeNotifier {
       final password = passwordController.text.trim();
 
       if (email.isEmpty || password.isEmpty) {
-        // ... (SnackBar error handling)
-        _isLoading = false;
-        notifyListeners();
+        _showResultDialog(
+          context,
+          'Perhatian',
+          'Email dan Password harus diisi.',
+          isSuccess: false,
+        );
         return;
       }
 
       final result = await ApiService.login(email, password);
       print("Response Login: $result");
 
-      final bool isSuccess = result['success'] == true ||
-          result['status'] == true ||
-          result['token'] != null; // Cek token juga
+      final token = result['token'];
+      final user = result['user'] ?? result['data']?['user'];
+
+      final bool isSuccess = token != null && user != null;
 
       if (isSuccess) {
-        final token = result['token'];
-        final user = result['user'];
-        final userId = user?['id'];
-        final userName = user?['name'];
-        final userEmail = user?['email'];
+        final userId = user['id'];
+        final userName = user['name'];
+        final userEmail = user['email'];
+
+        if (userId == null) {
+          throw Exception('Data pengguna tidak lengkap.');
+        }
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
@@ -69,41 +105,83 @@ class LoginViewModel extends ChangeNotifier {
         if (userName != null) await prefs.setString('user_name', userName);
         if (userEmail != null) await prefs.setString('user_email', userEmail);
 
-        if (token == null || userId == null) {
-          throw Exception('Token atau userId tidak ditemukan dalam response.');
+        // Setup dan load data awal di HomeViewModel
+        if (context.mounted) {
+          final vm = context.read<HomeViewModel>();
+          vm.setUserSession(userId: userId, token: token);
+          await vm.loadInitialData();
+
+          // Notifikasi Sukses
+          _showResultDialog(context, 'Login Berhasil! 🎉',
+              'Selamat datang, ${userName ?? email}!',
+              isSuccess: true);
         }
 
-        // 1. Ambil HomeViewModel dari tree
-        final vm = context.read<HomeViewModel>();
-        vm.setUserSession(userId: userId, token: token);
+        // Navigasi ke Navbar setelah dialog
+        await Future.delayed(const Duration(milliseconds: 100));
 
-        // 2. Muat data awal (penting agar HomeViewModel siap)
-        await vm.loadInitialData();
-
-        // 3. NAVIGASI TO THE POINT MENGGUNAKAN GLOBAL KEY
-        // Ini adalah cara paling andal untuk navigasi setelah operasi async
-        // 3. NAVIGASI TO THE POINT MENGGUNAKAN GLOBAL KEY
         final navigator = navigatorKey.currentState;
 
         if (navigator != null) {
-          print("✅ Navigating to MainNavigationPage using GlobalKey...");
+          print("✅ Navigating to Navbar using GlobalKey...");
           navigator.pushReplacement(
             MaterialPageRoute(builder: (_) => const Navbar()),
           );
         } else if (context.mounted) {
-          // Fallback, jika GlobalKey gagal
+          // Fallback
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const Navbar()),
           );
         }
       } else {
-        // ... (Handle login gagal jika respons 200 tapi isSuccess false)
+        // Varian 1: Response 200, tapi API menandakan gagal
+        final message = result['message'] ?? 'Email atau password salah.';
+        _showResultDialog(context, 'Login Gagal 😟', message, isSuccess: false);
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login gagal: $e')),
-        );
+        String errorMessage;
+        String errorString = e.toString();
+
+        // 1. Cek Kesalahan 401 (Unauthorized)
+        if (errorString.contains('401')) {
+          // Pesan to the point untuk kredensial salah
+          errorMessage = 'Email atau password salah.';
+        }
+        // 2. Cek Kesalahan Koneksi
+        else if (errorString.contains('SocketException') ||
+            errorString.contains('network')) {
+          errorMessage =
+              'Tidak ada koneksi internet. Silakan periksa koneksi Anda.';
+        }
+        // 3. Ekstraksi Pesan Spesifik dari Exception
+        // Mencari pesan di dalam string JSON yang dilempar oleh ApiService
+        else if (errorString.contains('message') && errorString.contains('{')) {
+          final regex = RegExp(r'"message":"(.*?)"');
+          final match = regex.firstMatch(errorString);
+
+          if (match != null && match.groupCount >= 1) {
+            errorMessage = match.group(1)!; // Ambil pesan yang diekstrak
+          } else {
+            errorMessage = 'Terjadi kesalahan otentikasi. Silakan coba lagi.';
+          }
+        }
+        // 4. Kesalahan Umum
+        else {
+          // Hapus awalan Exception: jika ada
+          errorMessage = errorString.contains('Exception: ')
+              ? errorString.replaceFirst('Exception: ', '')
+              : 'Terjadi kesalahan yang tidak terduga. Mohon coba beberapa saat lagi.';
+        }
+
+        // Pastikan pesan otentikasi yang panjang/aneh diganti dengan yang lugas
+        if (errorMessage.toLowerCase().contains('unauthorized') ||
+            errorMessage.toLowerCase().contains('unauthenticated')) {
+          errorMessage = 'Email atau password salah.';
+        }
+
+        _showResultDialog(context, 'Login Gagal', errorMessage,
+            isSuccess: false);
       }
     } finally {
       _isLoading = false;
@@ -120,18 +198,18 @@ class LoginViewModel extends ChangeNotifier {
     try {
       final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
+        // User membatalkan login
         _isLoading = false;
         notifyListeners();
         return;
       }
 
       final googleAuth = await googleUser.authentication;
-
       final String? idToken = googleAuth.idToken;
       final String? accessToken = googleAuth.accessToken;
 
       if (idToken == null && accessToken == null) {
-        throw Exception('Token Google tidak ditemukan.');
+        throw Exception('Token Google tidak ditemukan setelah otentikasi.');
       }
 
       final result = await ApiService.googleLogin(
@@ -139,18 +217,65 @@ class LoginViewModel extends ChangeNotifier {
         useAccessToken: idToken == null,
       );
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'] ?? 'Login Google berhasil')),
-        );
+      final token = result['token'];
+      final user = result['user'] ?? result['data']?['user'];
+
+      final bool isSuccess = token != null && user != null;
+
+      if (isSuccess) {
+        final userId = user['id'];
+        final userName = user['name'];
+        final userEmail = user['email'];
+
+        if (userId == null) {
+          throw Exception('Data pengguna tidak lengkap.');
+        }
+
+        // 1. Simpan sesi lokal
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('auth_token', token);
+        await prefs.setInt('user_id', userId);
+        if (userName != null) await prefs.setString('user_name', userName);
+        if (userEmail != null) await prefs.setString('user_email', userEmail);
+
+        // 2. Setup dan load data awal di HomeViewModel
+        final vm = context.read<HomeViewModel>();
+        vm.setUserSession(userId: userId, token: token);
+        await vm.loadInitialData();
+
+        // 3. Notifikasi Sukses & Navigasi
+        if (context.mounted) {
+          _showResultDialog(context, 'Login Berhasil! 🚀',
+              'Selamat datang, ${userName ?? userEmail} (Google)!',
+              isSuccess: true);
+
+          await Future.delayed(
+              const Duration(milliseconds: 100)); // Delay sebentar
+
+          // Navigasi
+          navigatorKey.currentState?.pushReplacement(
+            MaterialPageRoute(builder: (_) => const Navbar()),
+          );
+        }
+      } else {
+        final message =
+            result['message'] ?? 'Gagal memproses data login Google di server.';
+        _showResultDialog(context, 'Login Google Gagal', message,
+            isSuccess: false);
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login Google gagal: $e')),
-        );
+        String errorMessage = e.toString().contains('Exception: ')
+            ? e.toString().replaceFirst('Exception: ', '')
+            : e.toString();
+
+        _showResultDialog(context, 'Login Google Gagal 😥',
+            'Terjadi kesalahan: $errorMessage',
+            isSuccess: false);
       }
     } finally {
+      // Pastikan Google Sign Out jika terjadi error sebelum navigasi
+      await _googleSignIn.signOut();
       _isLoading = false;
       notifyListeners();
     }
@@ -162,6 +287,8 @@ class LoginViewModel extends ChangeNotifier {
     passwordController.dispose();
     super.dispose();
   }
+
+  // ===== Login Google =====
 }
 
 // ====== LOGIN PAGE ======
