@@ -830,6 +830,42 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> deleteEvent(int eventId) async {
+    if (_authToken == null) {
+      debugPrint("❌ deleteEvent: Token null");
+      return;
+    }
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // 1. Panggil API Delete
+      final message = await ApiService.deleteEvent(eventId, _authToken!);
+      debugPrint("✅ Delete Event Success: $message");
+
+      // 2. Update List Lokal (Optimistic Update)
+      // Kita hapus manual dari list _events agar tidak perlu fetch ulang ke server
+      _events.removeWhere((event) => event.id == eventId);
+
+      // 3. Handle jika event yang dihapus adalah event yang sedang aktif di UI
+      if (_currentEvent?.id == eventId) {
+        _currentEvent = null;
+
+        // Opsional: Jika masih ada event lain, set event pertama sebagai default
+        if (_events.isNotEmpty) {
+          _currentEvent = _events.first;
+        }
+      }
+    } catch (e) {
+      debugPrint("❌ Gagal menghapus event: $e");
+      rethrow; // Lempar error ke UI agar bisa menampilkan SnackBar Error
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   // 🔥 FUNGSI BARU: SETUP NOTIFIKASI
   Future<void> setupNotifications() async {
     if (_authToken == null) return;

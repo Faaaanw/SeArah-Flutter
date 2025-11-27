@@ -544,6 +544,28 @@ class ApiService {
     }
   }
 
+  static Future<String> deleteEvent(int eventId, String token) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/events/$eventId'),
+        headers: _getHeaders(token: token),
+      );
+
+      if (response.statusCode == 200) {
+        // Berhasil dihapus
+        final data = jsonDecode(response.body);
+        return data['message'] ?? 'Event berhasil dihapus';
+      } else {
+        // Gagal (Misal: 403 Forbidden karena bukan creator)
+        final body = jsonDecode(response.body);
+        throw Exception(body['message'] ?? 'Gagal menghapus event');
+      }
+    } catch (e) {
+      print("Error deleteEvent: $e");
+      rethrow;
+    }
+  }
+
   static Future<void> updateFcmToken(String fcmToken, String token) async {
     try {
       await http.post(

@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:searah_backend/models/event_model.dart';
 import 'package:searah_backend/viewmodel/home_viewmodel.dart';
-// import 'package:searah_backend/models/friend_model.dart'; // Uncomment jika perlu import Friend model
 
 class EventDetailPage extends StatelessWidget {
   final Event event;
@@ -20,8 +19,6 @@ class EventDetailPage extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        // 🔥 PERBAIKAN: Ambil langsung dari participants event
-        // Tidak perlu dicocokkan dengan vm.friends agar tidak ada masalah tipe data/missing data
         final List<dynamic> participants = currentEvent.participants;
 
         return DraggableScrollableSheet(
@@ -79,10 +76,7 @@ class EventDetailPage extends StatelessWidget {
                             controller: controller,
                             itemCount: participants.length,
                             itemBuilder: (context, index) {
-                              // Ambil data map langsung (aman dari error tipe)
                               final member = participants[index];
-
-                              // Safety check untuk nama dan email
                               final String name =
                                   member['name'] ?? 'Tanpa Nama';
                               final String email = member['email'] ?? '';
@@ -128,6 +122,53 @@ class EventDetailPage extends StatelessWidget {
     );
   }
 
+  // ----------------------------------------------------------------------
+  // FUNGSI HAPUS EVENT (KONFIRMASI)
+  // ----------------------------------------------------------------------
+  Future<void> _confirmDelete(
+      BuildContext context, HomeViewModel vm, int eventId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Hapus Event"),
+        content: const Text(
+            "Apakah Anda yakin ingin menghapus event ini? Tindakan ini tidak dapat dibatalkan."),
+        actions: [
+          TextButton(
+            child: const Text("Batal", style: TextStyle(color: Colors.grey)),
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          TextButton(
+            child: const Text("Hapus",
+                style:
+                    TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await vm.deleteEvent(eventId);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Event berhasil dihapus")),
+          );
+          Navigator.pop(context); // Kembali ke halaman sebelumnya
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text("Gagal menghapus: $e"),
+                backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final dateFormat = DateFormat('EEE, d MMMM yyyy');
@@ -136,12 +177,17 @@ class EventDetailPage extends StatelessWidget {
     return Consumer<HomeViewModel>(
       builder: (context, vm, child) {
         // Ambil data event terbaru dari state (jika ada update)
-        final currentEvent = vm.events.firstWhere(
+        // Gunakan orElse null agar aman jika event sudah terhapus
+        final Event currentEvent = vm.events.firstWhere(
           (e) => e.id == event.id,
           orElse: () => event,
         );
 
         final String creatorName = vm.getCreatorName(currentEvent.creatorId);
+
+        // 🔥 CEK APAKAH USER ADALAH PEMBUAT EVENT
+        // Pastikan Anda menambahkan getter `int? get currentUserId => _currentUserId;` di HomeViewModel
+        final bool isCreator = vm.currentUserId == currentEvent.creatorId;
 
         return Scaffold(
           backgroundColor: Colors.white,
@@ -151,6 +197,16 @@ class EventDetailPage extends StatelessWidget {
             backgroundColor: Colors.white,
             elevation: 0,
             iconTheme: const IconThemeData(color: Colors.black),
+            actions: [
+              // 🔥 TOMBOL HAPUS (HANYA MUNCUL JIKA CREATOR)
+              if (isCreator)
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  tooltip: 'Hapus Event',
+                  onPressed: () =>
+                      _confirmDelete(context, vm, currentEvent.id!),
+                ),
+            ],
           ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
@@ -284,7 +340,7 @@ class EventDetailPage extends StatelessWidget {
             ),
           ),
 
-          // 6. Tombol Aksi
+          // 6. Tombol Aksi (Join/Leave)
           bottomNavigationBar: Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
