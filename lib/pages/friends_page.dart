@@ -96,10 +96,7 @@ class _FriendsPageState extends State<FriendsPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Back Button
-          _buildCircleButton(
-            icon: Icons.arrow_back_ios_new_rounded,
-            onTap: () => Navigator.pop(context),
-          ),
+          
 
           const Text(
             'Friend Zone',

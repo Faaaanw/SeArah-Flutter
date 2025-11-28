@@ -266,29 +266,72 @@ class ApiService {
     }
   }
 
+  static Future<List<dynamic>> getGroupCandidates({
+    required String token,
+    required int groupId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/groups/$groupId/candidates'), // Route Laravel baru
+      headers: _getHeaders(token: token),
+    );
+
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body);
+      // Backend: { "success": true, "data": [ ...list user... ] }
+      return body['data'];
+    } else {
+      throw Exception('Gagal mengambil daftar teman: ${response.body}');
+    }
+  }
+
   // ➕ Tambah Anggota ke Grup
   static Future<void> addMemberToGroup({
     required String token,
     required int groupId,
-    required int memberUserId, // ID pengguna yang akan ditambahkan
+    required int memberUserId, // Kita kirim ID, bukan Email lagi
   }) async {
     final response = await http.post(
-      // URL: /groups/{group}/members
       Uri.parse('$baseUrl/groups/$groupId/members'),
       headers: _getHeaders(token: token, isJson: true),
       body: jsonEncode({
-        'user_id': memberUserId,
+        'user_id':
+            memberUserId, // Key JSON harus 'user_id' sesuai Laravel request->user_id
       }),
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Gagal menambah anggota: ${response.body}');
+      // Coba ambil pesan error spesifik dari backend jika ada
+      String msg = 'Gagal menambah anggota';
+      try {
+        final body = jsonDecode(response.body);
+        msg = body['message'] ?? msg;
+      } catch (_) {}
+      throw Exception(msg);
     }
-    // Jika berhasil (status 200), tidak ada data yang dikembalikan (void)
   }
 
-  // 🌐 GET Request Umum (bisa digunakan untuk endpoint seperti /search-user)
-  // 🔥 TAMBAHKAN FUNGSI INI DI DALAM CLASS ApiService
+  // ---------------------------------------------------------------------------
+  // 📍 3. Ambil Detail Group + Lokasi Member (PENTING untuk GroupDetailPage)
+  // ---------------------------------------------------------------------------
+  // Ini pasangan dari controller Laravel: membersWithLocation
+  static Future<Map<String, dynamic>> getGroupDetails({
+    required String token,
+    required int groupId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/groups/$groupId/members'),
+      headers: _getHeaders(token: token),
+    );
+
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body);
+      // Backend: { "success": true, "group": {...}, "members": [...] }
+      return body;
+    } else {
+      throw Exception('Gagal mengambil data grup: ${response.body}');
+    }
+  }
+
   static Future<Map<String, dynamic>> getRequest(
       String endpoint, String token) async {
     try {

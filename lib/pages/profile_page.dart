@@ -65,7 +65,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     // 2. 🛑 PANGGIL CLEAR SESSION DI HOMEVIEWMODEL 🛑
     // Ini akan menghentikan semua timer, streaming GPS, dan polling teman.
-    homeViewModel.clearSession(); // 🔥 PENTING!
+    homeViewModel.clearSession(); 
 
     // 3. Panggil API Logout (optional)
     if (token != null) {

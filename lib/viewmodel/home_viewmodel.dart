@@ -155,6 +155,50 @@ class HomeViewModel extends ChangeNotifier {
     await fetchEvents(groupId);
   }
 
+  // Contoh di ViewModel
+  Future<List<dynamic>> fetchCandidates(int groupId) async {
+    // 1. Cek apakah token null. Jika ya, kembalikan list kosong agar tidak crash.
+    if (_authToken == null) {
+      print("⚠️ Gagal fetch candidates: Token tidak ditemukan.");
+      return [];
+    }
+
+    try {
+      // 2. Panggil API dengan tanda seru (!) karena kita sudah memastikan tidak null di atas
+      return await ApiService.getGroupCandidates(
+        token: _authToken!,
+        groupId: groupId,
+      );
+    } catch (e) {
+      print("Error fetching candidates: $e");
+      return [];
+    }
+  }
+
+  Future<bool> addMemberToGroup(int groupId, int userId) async {
+    if (_authToken == null) return false;
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Panggil API Service yang sudah diperbaiki sebelumnya
+      await ApiService.addMemberToGroup(
+        token: _authToken!,
+        groupId: groupId,
+        memberUserId: userId,
+      );
+
+      _isLoading = false;
+      notifyListeners();
+      return true; // Berhasil
+    } catch (e) {
+      print("Error add member: $e");
+      _isLoading = false;
+      notifyListeners();
+      return false; // Gagal
+    }
+  }
+
   // Ambil teman dari backend per grup
   Future<void> fetchFriendsByGroup(int groupId) async {
     if (_authToken == null) return;
@@ -935,7 +979,7 @@ class HomeViewModel extends ChangeNotifier {
     if (!friend.isSharingLocation ||
         friend.latitude == null ||
         friend.longitude == null) {
-      return "Lokasi tidak tersedia";
+      return "";
     }
 
     // Hitung jarak menggunakan LatLng user saat ini vs LatLng teman
