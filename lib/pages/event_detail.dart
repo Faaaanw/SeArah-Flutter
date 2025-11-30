@@ -95,7 +95,7 @@ class EventDetailPage extends StatelessWidget {
                                   ),
                                 ),
                                 title: Text(name),
-                                subtitle: email.isNotEmpty ? Text(email) : null,
+                              
                                 trailing: memberId == currentEvent.creatorId
                                     ? Container(
                                         padding: const EdgeInsets.symmetric(

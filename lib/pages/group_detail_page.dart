@@ -486,7 +486,7 @@ class _MemberSelectionDialogState extends State<_MemberSelectionDialog> {
                            backgroundImage: NetworkImage("https://ui-avatars.com/api/?name=$name&background=random"),
                         ),
                         title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(email),
+                      
                         trailing: const Icon(Icons.add_circle_outline, color: _kPrimaryOrange),
                         onTap: () => _addMember(userId),
                       );

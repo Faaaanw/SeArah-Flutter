@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-// import 'package:intl/intl.dart'; 
-// import 'package:latlong2/latlong.dart'; 
+// import 'package:intl/intl.dart';
+// import 'package:latlong2/latlong.dart';
 
 // Import Halaman Detail Group
 import 'package:searah_backend/pages/group_detail_page.dart';
+import 'package:searah_backend/pages/notification_page.dart';
 
 // Import ViewModel & Models
 import 'package:searah_backend/viewmodel/home_viewmodel.dart';
@@ -38,15 +39,23 @@ class DashboardPage extends StatelessWidget {
               color: _primaryOrange,
               backgroundColor: Colors.white,
               onRefresh: () async {
-                // Pastikan method refreshData() ada di extension/class HomeViewModel
-                // await viewModel.refreshData(); 
-                // Jika belum ada extension, uncomment baris bawah untuk reload biasa:
-                await viewModel.loadInitialData(); 
+                // 1. Tangkap ID grup yang sedang aktif
+                final savedGroupId = viewModel.currentGroupId;
+
+                // 2. Refresh data dari server
+                await viewModel.loadInitialData();
+
+                // 3. Apply ulang filter grup agar teman yang muncul sesuai grup
+                // Beri sedikit delay agar transisi UI lebih halus (opsional)
+                if (savedGroupId != null) {
+                  await viewModel.setCurrentGroup(savedGroupId);
+                }
               },
               child: SingleChildScrollView(
                 // ✅ FITUR 2: PHYSICS AGAR BISA SCROLL MESKI KONTEN SEDIKIT
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: _defaultPadding),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: _defaultPadding),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -56,7 +65,7 @@ class DashboardPage extends StatelessWidget {
                     _buildSearchHeader(context, viewModel),
 
                     // Indikator Loading Tipis (Non-blocking)
-                    if (viewModel.isLoading) 
+                    if (viewModel.isLoading)
                       Padding(
                         padding: const EdgeInsets.only(top: 16.0),
                         child: LinearProgressIndicator(
@@ -71,12 +80,13 @@ class DashboardPage extends StatelessWidget {
                     // 2. HIGHLIGHT EVENT
                     _buildSectionTitle("Recent Event"),
                     const SizedBox(height: 24),
-                    
+
                     // Logic Tampilan Event
                     if (viewModel.isLoading && upcomingEvent == null)
                       _buildLoadingCard()
                     else if (upcomingEvent != null)
-                      _buildEventHighlightCard(context, upcomingEvent, viewModel)
+                      _buildEventHighlightCard(
+                          context, upcomingEvent, viewModel)
                     else
                       _buildEmptyEventCard(),
 
@@ -130,7 +140,6 @@ class DashboardPage extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          const Icon(Icons.search, color: _primaryOrange, size: 26),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -164,7 +173,7 @@ class DashboardPage extends StatelessWidget {
 
   // ✅ FITUR 3: MODAL DENGAN NAVIGASI KE DETAIL GROUP DIKEMBALIKAN
   void _showGroupModal(BuildContext context, HomeViewModel vm) {
-     showModalBottomSheet(
+    showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -180,31 +189,50 @@ class DashboardPage extends StatelessWidget {
             children: [
               Center(
                 child: Container(
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2)),
                 ),
               ),
               const SizedBox(height: 20),
-              const Text("Pilih Grup", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _textDark)),
+              const Text("Pilih Grup",
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: _textDark)),
               const SizedBox(height: 10),
-              
+
               // Opsi Semua Teman
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: _lightOrangeBg, borderRadius: BorderRadius.circular(8)),
+                  decoration: BoxDecoration(
+                      color: _lightOrangeBg,
+                      borderRadius: BorderRadius.circular(8)),
                   child: const Icon(Icons.public, color: _primaryOrange),
                 ),
-                title: const Text('Semua Teman', style: TextStyle(fontWeight: FontWeight.w600)),
-                trailing: vm.currentGroupId == null ? const Icon(Icons.check, color: _primaryOrange) : null,
-                onTap: () { Navigator.pop(context); vm.setCurrentGroup(null); },
+                title: const Text('Semua Teman',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                trailing: vm.currentGroupId == null
+                    ? const Icon(Icons.check, color: _primaryOrange)
+                    : null,
+                onTap: () {
+                  Navigator.pop(context);
+                  vm.setCurrentGroup(null);
+                },
               ),
-              
+
               const Divider(),
-              
+
               if (groups.isEmpty)
-                const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: Text('Belum ada grup.', style: TextStyle(color: _textGrey))))
+                const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                        child: Text('Belum ada grup.',
+                            style: TextStyle(color: _textGrey))))
               else
                 Flexible(
                   child: ListView.builder(
@@ -213,26 +241,38 @@ class DashboardPage extends StatelessWidget {
                     itemBuilder: (context, index) {
                       final group = groups[index];
                       final isSelected = vm.currentGroupId == group.id;
-                      
+
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: Container(
                           padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: isSelected ? _primaryOrange.withOpacity(0.1) : Colors.grey.shade50, borderRadius: BorderRadius.circular(8)),
-                          child: Icon(Icons.group, color: isSelected ? _primaryOrange : Colors.grey),
+                          decoration: BoxDecoration(
+                              color: isSelected
+                                  ? _primaryOrange.withOpacity(0.1)
+                                  : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(8)),
+                          child: Icon(Icons.group,
+                              color: isSelected ? _primaryOrange : Colors.grey),
                         ),
-                        title: Text(group.name, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? _primaryOrange : _textDark)),
-                        
+                        title: Text(group.name,
+                            style: TextStyle(
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color:
+                                    isSelected ? _primaryOrange : _textDark)),
+
                         // ✅ BAGIAN INI DIKEMBALIKAN: Tombol Info Navigasi
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (isSelected)
                               const Icon(Icons.check, color: _primaryOrange),
-                            
+
                             // Tombol Info (i) untuk ke Detail Page
                             IconButton(
-                              icon: Icon(Icons.info_outline, color: Colors.grey.shade400),
+                              icon: Icon(Icons.info_outline,
+                                  color: Colors.grey.shade400),
                               onPressed: () {
                                 // 1. Tutup Modal
                                 Navigator.pop(context);
@@ -251,11 +291,11 @@ class DashboardPage extends StatelessWidget {
                             ),
                           ],
                         ),
-                        
+
                         // Klik body ListTile untuk memilih grup
-                        onTap: () async { 
-                          Navigator.pop(context); 
-                          await vm.setCurrentGroup(group.id); 
+                        onTap: () async {
+                          Navigator.pop(context);
+                          await vm.setCurrentGroup(group.id);
                         },
                       );
                     },
@@ -283,7 +323,8 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildEventHighlightCard(BuildContext context, Event event, HomeViewModel viewModel) {
+  Widget _buildEventHighlightCard(
+      BuildContext context, Event event, HomeViewModel viewModel) {
     bool isJoined = event.participants.contains(viewModel.currentUserId);
     String distanceText = viewModel.getDistanceToEvent(event);
     List<Friend> participants = viewModel.getEventParticipantsData(event);
@@ -295,11 +336,16 @@ class DashboardPage extends StatelessWidget {
         color: _primaryOrange,
         borderRadius: BorderRadius.circular(_cardRadius),
         boxShadow: [
-          BoxShadow(color: _primaryOrange.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 6)),
+          BoxShadow(
+              color: _primaryOrange.withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6)),
         ],
         image: const DecorationImage(
-          image: NetworkImage("https://www.transparenttextures.com/patterns/cubes.png"),
-          opacity: 0.1, fit: BoxFit.cover,
+          image: NetworkImage(
+              "https://www.transparenttextures.com/patterns/cubes.png"),
+          opacity: 0.1,
+          fit: BoxFit.cover,
         ),
       ),
       child: Column(
@@ -308,11 +354,24 @@ class DashboardPage extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(child: Text(event.title, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+              Expanded(
+                  child: Text(event.title,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
-                child: Row(children: [const Icon(Icons.near_me, color: Colors.white, size: 14), const SizedBox(width: 4), Text(distanceText, style: const TextStyle(color: Colors.white, fontSize: 12))]),
+                decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12)),
+                child: Row(children: [
+                  const Icon(Icons.near_me, color: Colors.white, size: 14),
+                  const SizedBox(width: 4),
+                  Text(distanceText,
+                      style: const TextStyle(color: Colors.white, fontSize: 12))
+                ]),
               )
             ],
           ),
@@ -320,12 +379,39 @@ class DashboardPage extends StatelessWidget {
           Row(
             children: [
               if (participants.isNotEmpty)
-                SizedBox(height: 30, width: (participants.length * 20.0 + 20).clamp(0, 120), child: Stack(children: List.generate(participants.take(4).length, (index) { final member = participants[index]; return Positioned(left: index * 18.0, child: CircleAvatar(radius: 14, backgroundColor: Colors.white, child: CircleAvatar(radius: 12, backgroundColor: Colors.grey.shade200, backgroundImage: NetworkImage(_getAvatarUrl(member.name))))); })))
-              else const Text("Belum ada peserta", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                SizedBox(
+                    height: 30,
+                    width: (participants.length * 20.0 + 20).clamp(0, 120),
+                    child: Stack(
+                        children:
+                            List.generate(participants.take(4).length, (index) {
+                      final member = participants[index];
+                      return Positioned(
+                          left: index * 18.0,
+                          child: CircleAvatar(
+                              radius: 14,
+                              backgroundColor: Colors.white,
+                              child: CircleAvatar(
+                                  radius: 12,
+                                  backgroundColor: Colors.grey.shade200,
+                                  backgroundImage: NetworkImage(
+                                      _getAvatarUrl(member.name)))));
+                    })))
+              else
+                const Text("Belum ada peserta",
+                    style: TextStyle(color: Colors.white70, fontSize: 12)),
               const Spacer(),
               ElevatedButton(
-                onPressed: () { isJoined ? viewModel.leaveEvent(event.id!) : viewModel.joinEvent(event.id!); },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFFFF6F4D), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+                onPressed: () {
+                  isJoined
+                      ? viewModel.leaveEvent(event.id!)
+                      : viewModel.joinEvent(event.id!);
+                },
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFFFF6F4D),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20))),
                 child: Text(isJoined ? "Batal" : "Gabung"),
               )
             ],
@@ -339,33 +425,74 @@ class DashboardPage extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: _lightOrangeBg, borderRadius: BorderRadius.circular(_cardRadius)),
-      child: Column(children: [const Icon(Icons.event_busy, size: 40, color: _primaryOrange), const SizedBox(height: 10), const Text("Belum ada acara", style: TextStyle(color: _textDark, fontWeight: FontWeight.bold)), const Text("Buat jadwal kumpul dengan temanmu!", style: TextStyle(color: _textGrey, fontSize: 12))]),
+      decoration: BoxDecoration(
+          color: _lightOrangeBg,
+          borderRadius: BorderRadius.circular(_cardRadius)),
+      child: Column(children: [
+        const Icon(Icons.event_busy, size: 40, color: _primaryOrange),
+        const SizedBox(height: 10),
+        const Text("Belum ada acara",
+            style: TextStyle(color: _textDark, fontWeight: FontWeight.bold)),
+        const Text("Buat jadwal kumpul dengan temanmu!",
+            style: TextStyle(color: _textGrey, fontSize: 12))
+      ]),
     );
   }
 
   Widget _buildLocationToggle(HomeViewModel viewModel) {
-     return Container(
+    return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey.shade200)),
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Row(children: [
-              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: viewModel.isUserSharingLocation ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1), shape: BoxShape.circle), child: Icon(Icons.my_location, color: viewModel.isUserSharingLocation ? Colors.green : Colors.red, size: 20)),
-              const SizedBox(width: 12),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("Berbagi Lokasi", style: TextStyle(fontWeight: FontWeight.bold, color: _textDark)), Text(viewModel.isUserSharingLocation ? "Aktif" : "Nonaktif", style: TextStyle(fontSize: 12, color: viewModel.isUserSharingLocation ? Colors.green : Colors.red))]),
-            ]),
-          Switch(value: viewModel.isUserSharingLocation, onChanged: viewModel.toggleLocationSharing, activeColor: _primaryOrange, activeTrackColor: _primaryOrange.withOpacity(0.2))
+        Row(children: [
+          Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: viewModel.isUserSharingLocation
+                      ? Colors.green.withOpacity(0.1)
+                      : Colors.red.withOpacity(0.1),
+                  shape: BoxShape.circle),
+              child: Icon(Icons.my_location,
+                  color: viewModel.isUserSharingLocation
+                      ? Colors.green
+                      : Colors.red,
+                  size: 20)),
+          const SizedBox(width: 12),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text("Berbagi Lokasi",
+                style:
+                    TextStyle(fontWeight: FontWeight.bold, color: _textDark)),
+            Text(viewModel.isUserSharingLocation ? "Aktif" : "Nonaktif",
+                style: TextStyle(
+                    fontSize: 12,
+                    color: viewModel.isUserSharingLocation
+                        ? Colors.green
+                        : Colors.red))
+          ]),
         ]),
+        Switch(
+            value: viewModel.isUserSharingLocation,
+            onChanged: viewModel.toggleLocationSharing,
+            activeColor: _primaryOrange,
+            activeTrackColor: _primaryOrange.withOpacity(0.2))
+      ]),
     );
   }
 
   Widget _buildFriendsList(HomeViewModel viewModel) {
     if (viewModel.isLoading) {
-      return const Center(child: Padding(padding: EdgeInsets.all(20.0), child: CircularProgressIndicator(color: _primaryOrange)));
+      return const Center(
+          child: Padding(
+              padding: EdgeInsets.all(20.0),
+              child: CircularProgressIndicator(color: _primaryOrange)));
     }
 
     final currentUserId = viewModel.currentUserId;
-    final filteredFriends = viewModel.friends.where((f) => f.id != currentUserId).take(10).toList();
+    final filteredFriends =
+        viewModel.friends.where((f) => f.id != currentUserId).take(10).toList();
 
     if (filteredFriends.isEmpty) {
       return Center(
@@ -373,9 +500,13 @@ class DashboardPage extends StatelessWidget {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            const Text("Tidak ada teman yang aktif.", style: TextStyle(color: _textGrey)),
+            const Text("Tidak ada teman yang aktif.",
+                style: TextStyle(color: _textGrey)),
             if (viewModel.currentGroupId != null)
-              TextButton(onPressed: () => viewModel.setCurrentGroup(null), child: const Text("Lihat Semua Teman", style: TextStyle(color: _primaryOrange)))
+              TextButton(
+                  onPressed: () => viewModel.setCurrentGroup(null),
+                  child: const Text("Lihat Semua Teman",
+                      style: TextStyle(color: _primaryOrange)))
           ],
         ),
       ));
@@ -390,13 +521,50 @@ class DashboardPage extends StatelessWidget {
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: const Color(0xFFFFF0EB), borderRadius: BorderRadius.circular(18)),
+          decoration: BoxDecoration(
+              color: const Color(0xFFFFF0EB),
+              borderRadius: BorderRadius.circular(18)),
           child: Row(children: [
-              CircleAvatar(radius: 24, backgroundColor: Colors.white, child: CircleAvatar(radius: 22, backgroundImage: NetworkImage(avatarUrl))),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(friend.name ?? "Tanpa Nama", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF2D2D2D))), const SizedBox(height: 4), Row(children: [Icon(isSharing ? Icons.location_on : Icons.location_off, size: 12, color: isSharing ? Colors.green : Colors.grey), const SizedBox(width: 4), Text(isSharing ? "Sedang aktif" : "Lokasi dimatikan", style: TextStyle(fontSize: 12, color: isSharing ? Colors.black54 : Colors.grey))])])),
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [const Icon(Icons.battery_std, size: 14, color: Color(0xFFFF6F4D)), const SizedBox(height: 4), Row(children: [const Icon(Icons.directions_walk, size: 14, color: Color(0xFFFF6F4D)), const SizedBox(width: 2), Text(distance, style: const TextStyle(fontSize: 12, color: Color(0xFF888888)))])])
-            ]),
+            CircleAvatar(
+                radius: 24,
+                backgroundColor: Colors.white,
+                child: CircleAvatar(
+                    radius: 22, backgroundImage: NetworkImage(avatarUrl))),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(friend.name ?? "Tanpa Nama",
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Color(0xFF2D2D2D))),
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    Icon(isSharing ? Icons.location_on : Icons.location_off,
+                        size: 12,
+                        color: isSharing ? Colors.green : Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(isSharing ? "Sedang aktif" : "Lokasi dimatikan",
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: isSharing ? Colors.black54 : Colors.grey))
+                  ])
+                ])),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              const Icon(Icons.battery_std, size: 14, color: Color(0xFFFF6F4D)),
+              const SizedBox(height: 4),
+              Row(children: [
+                const Icon(Icons.directions_walk,
+                    size: 14, color: Color(0xFFFF6F4D)),
+                const SizedBox(width: 2),
+                Text(distance,
+                    style:
+                        const TextStyle(fontSize: 12, color: Color(0xFF888888)))
+              ])
+            ])
+          ]),
         );
       }).toList(),
     );
@@ -404,28 +572,65 @@ class DashboardPage extends StatelessWidget {
 
   Widget _buildQuickMenuGrid(BuildContext context, HomeViewModel viewModel) {
     return GridView.count(
-      shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisCount: 2, childAspectRatio: 1.8, crossAxisSpacing: 12, mainAxisSpacing: 12,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      childAspectRatio: 1.8,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
       children: [
-        _buildMenuButton(context, Icons.group_add_outlined, "Buat Grup", () { _showGroupModal(context, viewModel); }),
-        _buildMenuButton(context, Icons.map_outlined, "Lihat Peta", () {}),
-        _buildMenuButton(context, Icons.notifications_none, "Notifikasi", () {}),
+        _buildMenuButton(context, Icons.group_add_outlined, "Buat Grup", () {
+          _showGroupModal(context, viewModel);
+        }),
+       _buildMenuButton(
+        context, 
+        Icons.notifications_none, 
+        "Notifikasi", 
+        () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const NotificationPage(),
+            ),
+          );
+        }
+      ),
         _buildMenuButton(context, Icons.settings_outlined, "Pengaturan", () {}),
       ],
     );
   }
 
-  Widget _buildMenuButton(BuildContext context, IconData icon, String label, VoidCallback onTap) {
+  Widget _buildMenuButton(
+      BuildContext context, IconData icon, String label, VoidCallback onTap) {
     return InkWell(
-      onTap: onTap, borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade100), boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))]),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, color: _primaryOrange, size: 28), const SizedBox(height: 8), Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: _textDark))]),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade100),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.grey.withOpacity(0.05),
+                  blurRadius: 5,
+                  offset: const Offset(0, 2))
+            ]),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(icon, color: _primaryOrange, size: 28),
+          const SizedBox(height: 8),
+          Text(label,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w600, color: _textDark))
+        ]),
       ),
     );
   }
 
   Widget _buildSectionTitle(String title) {
-    return Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _primaryOrange));
+    return Text(title,
+        style: const TextStyle(
+            fontSize: 18, fontWeight: FontWeight.bold, color: _primaryOrange));
   }
 
   String _getAvatarUrl(String? name) {

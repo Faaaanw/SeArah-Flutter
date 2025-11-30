@@ -440,16 +440,6 @@ class _FriendsPageState extends State<FriendsPage> {
               color: textDark,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontFamily: fontName,
-              fontSize: 14,
-              color: textLight,
-            ),
-          ),
         ],
       ),
     );

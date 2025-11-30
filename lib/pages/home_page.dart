@@ -104,9 +104,8 @@ class _HomeViewState extends State<_HomeView> {
       );
     }
 // Akhir dari PERBAIKAN LOGIC UTAMA BOTTOM PANEL
-
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: false, // Pastikan ini tetap false
       body: Stack(
         children: [
           // 1. Map Layer
@@ -119,34 +118,37 @@ class _HomeViewState extends State<_HomeView> {
           if (vm.hasGroups && !vm.isLoading && !vm.isEventLoading)
             Align(
               alignment: Alignment.bottomCenter,
-              child: AnimatedContainer(
-                // Gunakan AnimatedContainer agar transisi naik/turunnya halus
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-
-                // LOGIC 1: TINGGI PANEL
-                // Jika ada event: 0.4 (40% layar) - Lebih pendek
-                // Jika TIDAK ada event: 0.55 (55% layar) - Lebih tinggi/naik ke atas
-                height: MediaQuery.of(context).size.height *
-                    (vm.events.isNotEmpty ? 0.40 : 0.40),
-
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(40),
-                    topRight: Radius.circular(40),
+              // 🔥 TAMBAHAN: Bungkus dengan GestureDetector
+              child: GestureDetector(
+                onTap: () {
+                  // 🔥 LOGIC: Hilangkan keyboard saat panel disentuh
+                  FocusScope.of(context).unfocus();
+                },
+                // Widget Panel Putih Asli
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  // Tinggi panel
+                  height: MediaQuery.of(context).size.height *
+                      (vm.events.isNotEmpty ? 0.40 : 0.40),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(40),
+                      topRight: Radius.circular(40),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 15,
+                          offset: Offset(0, -5))
+                    ],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 15,
-                        offset: Offset(0, -5))
-                  ],
-                ),
-                child: Padding(
-                  padding:
-                      EdgeInsets.only(top: vm.events.isNotEmpty ? 20.0 : 20.0),
-                  child: bottomPanelContent,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                        top: vm.events.isNotEmpty ? 20.0 : 20.0),
+                    child: bottomPanelContent,
+                  ),
                 ),
               ),
             ),
@@ -225,8 +227,6 @@ Widget _buildMapLayer(
   HomeViewModel vm,
   List<Friend> friends,
 ) {
-  final userLoc = vm.userLocation;
-
   return RepaintBoundary(
     child: FlutterMap(
       mapController: vm.mapController,
@@ -252,7 +252,7 @@ Widget _buildMapLayer(
         /// MARKER LAYER
         Consumer<HomeViewModel>(
           builder: (context, vm, _) {
-            // Marker Teman
+            // 1. Marker Teman
             final friendMarkers = vm.friendsForMap
                 .where((f) => f.id != vm.currentUserId)
                 .map(
@@ -268,7 +268,7 @@ Widget _buildMapLayer(
                 )
                 .toList();
 
-            // Marker User Sendiri
+            // 2. Marker User Sendiri
             final userMarker = Marker(
               point: vm.userLocation,
               width: 60,
@@ -277,7 +277,7 @@ Widget _buildMapLayer(
                   color: _kPrimaryColor, size: 50),
             );
 
-            // Marker Pencarian (Hanya Pin Merah, TANPA POPUP)
+            // 3. Marker Pencarian
             final searchMarkerWidget = vm.searchMarker == null
                 ? <Marker>[]
                 : [
@@ -293,13 +293,66 @@ Widget _buildMapLayer(
                     )
                   ];
 
-            // 🔥 Code Popup "Add Event Here" SUDAH DIHAPUS DISINI
-            // agar user menggunakan tombol baru di kanan atas.
+            // 🔥 4. SINGLE EVENT MARKER (HANYA YANG DIPILIH) 🔥
+            // Kita cek apakah ada event yang sedang dipilih (currentEvent)
+            final currentEvent = vm.currentEvent;
+
+            // List marker event (isinya maksimal cuma 1 atau kosong)
+            final List<Marker> selectedEventMarkerList = [];
+
+            if (currentEvent != null) {
+              selectedEventMarkerList.add(
+                Marker(
+                  // Pastikan LatLng diambil dari event yang sedang dipilih
+                  point: LatLng(currentEvent.locationLatitude,
+                      currentEvent.locationLongitude),
+                  width: 80, // Sedikit lebih lebar agar teks muat
+                  height: 80,
+                  child: Column(
+                    children: [
+                      // Icon Marker Biru Besar (agar terlihat fokus)
+                      const Icon(
+                        Icons.location_on,
+                        color: Colors.blue, // 🔵 Warna Biru Sesuai Request
+                        size:
+                            50, // Ukuran diperbesar sedikit biar jelas ini yg dipilih
+                      ),
+                      // Label Judul Event
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: const [
+                              BoxShadow(
+                                  blurRadius: 4,
+                                  color: Colors.black26,
+                                  offset: Offset(0, 2))
+                            ]),
+                        child: Text(
+                          currentEvent.title.length > 10
+                              ? "${currentEvent.title.substring(0, 8)}..."
+                              : currentEvent.title,
+                          style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+              );
+            }
 
             return MarkerLayer(
               markers: [
                 ...friendMarkers,
                 ...searchMarkerWidget,
+                ...selectedEventMarkerList, // 👈 Hanya memunculkan 1 marker event yang aktif
                 if (vm.isUserSharingLocation) userMarker,
               ],
             );
@@ -309,23 +362,29 @@ Widget _buildMapLayer(
     ),
   );
 }
-
 // ... _buildSearchAndFilter (UI dipercantik sedikit) ...
 // ... (kode lain tetap sama)
 
 Widget _buildSearchAndFilter(BuildContext context, HomeViewModel vm) {
   return Positioned(
-    top: 60,
+    top: 60, // Sesuaikan jika perlu
     left: 24,
     right: 24,
-    child: Column(
+    // ❌ HAPUS COLUMN PEMBUNGKUS UTAMA DISINI
+    // Ganti langsung dengan Row agar sisi Kiri dan Kanan terpisah secara vertikal
+    child: Row(
+      crossAxisAlignment:
+          CrossAxisAlignment.start, // 🔥 PENTING: Agar start dari atas
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 🔸 Search bar (Tetap Sama)
-            Expanded(
-              child: Container(
+        // ---------------------------------------------
+        // 👈 SISI KIRI (Search Bar + Loading + Hasil)
+        // ---------------------------------------------
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // Agar tidak memakan semua tinggi
+            children: [
+              // 1. Search Bar Container
+              Container(
                 height: 50,
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -379,125 +438,138 @@ Widget _buildSearchAndFilter(BuildContext context, HomeViewModel vm) {
                   },
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
 
-            // 🔸 Kolom Kanan: Group Dropdown & Create Event Button
-            Column(
-              children: [
-                // 1. Group Dropdown
-                _GroupDropdownButton(vm: vm),
+              // 2. Loading Bar (Dipindah kesini)
+              if (vm.isSearching)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8, left: 12, right: 12),
+                  child: LinearProgressIndicator(
+                    minHeight: 4,
+                    borderRadius: BorderRadius.all(Radius.circular(10)),
+                    color: _kPrimaryColor,
+                    backgroundColor: Colors.black12,
+                  ),
+                ),
 
-                const SizedBox(height: 12),
-
-                // 2. Tombol Create Event (PERBAIKAN DISINI)
-                if (vm.hasGroups)
-                  GestureDetector(
-                    onTap: () {
-                      // Validasi sederhana
-                      if (vm.currentGroupId == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text("Pilih grup terlebih dahulu")),
-                        );
-                        return;
-                      }
-
-                      // 🔥 FIX: Hapus pengiriman latitude/longitude/locationName
-                      // Cukup kirim groupId saja.
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CreateEventPage(
-                            groupId: vm.currentGroupId!,
-                          ),
-                        ),
+              // 3. Hasil Pencarian (Dipindah kesini)
+              if (vm.searchResults.isNotEmpty && !vm.isSearching)
+                Container(
+                  margin: const EdgeInsets.only(
+                      top: 4), // Jarak tipis dari search bar
+                  constraints: const BoxConstraints(maxHeight: 250),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(15),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black26, blurRadius: 5)
+                    ],
+                  ),
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: vm.searchResults.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1, indent: 16, endIndent: 16),
+                    itemBuilder: (context, index) {
+                      final loc = vm.searchResults[index];
+                      final name = loc['display_name'] ?? 'Unknown';
+                      return ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.location_on,
+                            color: _kPrimaryColor, size: 18),
+                        title: Text(name,
+                            style: const TextStyle(fontSize: 13),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis),
+                        onTap: () {
+                          FocusScope.of(context).unfocus();
+                          final lat = double.tryParse(loc['lat'] ?? '0') ?? 0;
+                          final lon = double.tryParse(loc['lon'] ?? '0') ?? 0;
+                          vm.setSearchMarker(lat, lon);
+                          vm.searchController.text = name;
+                          vm.clearSearchResults();
+                        },
                       );
                     },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _kPrimaryColor,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black26,
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          )
-                        ],
-                      ),
-                      child: const Column(
-                        children: [
-                          Icon(Icons.add_location_alt_outlined,
-                              color: Colors.white, size: 20),
-                          SizedBox(height: 2),
-                          Text(
-                            "Create",
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            "Event",
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
-              ],
-            ),
-          ],
+                ),
+            ],
+          ),
         ),
 
-        // 🔸 Loading bar & Search Results (Tetap sama)
-        if (vm.isSearching)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: const LinearProgressIndicator(
-                minHeight: 2, color: _kPrimaryColor),
-          ),
+        const SizedBox(width: 12),
 
-        if (vm.searchResults.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(top: 8),
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: const [
-                BoxShadow(color: Colors.black26, blurRadius: 5)
-              ],
-            ),
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: vm.searchResults.length,
-              itemBuilder: (context, index) {
-                final loc = vm.searchResults[index];
-                final name = loc['display_name'] ?? 'Unknown';
-                return ListTile(
-                  dense: true,
-                  leading: const Icon(Icons.location_on,
-                      color: _kPrimaryColor, size: 18),
-                  title: Text(name, style: const TextStyle(fontSize: 13)),
-                  onTap: () {
-                    FocusScope.of(context).unfocus();
-                    final lat = double.tryParse(loc['lat'] ?? '0') ?? 0;
-                    final lon = double.tryParse(loc['lon'] ?? '0') ?? 0;
-                    vm.setSearchMarker(lat, lon);
-                    vm.searchController.text = name;
-                    vm.clearSearchResults();
-                  },
-                );
-              },
-            ),
-          ),
+        // ---------------------------------------------
+        // 👉 SISI KANAN (Group & Create Event)
+        // ---------------------------------------------
+        // Kolom ini sekarang berdiri sendiri di sebelah kanan
+        // dan tidak akan mendorong hasil pencarian ke bawah.
+        Column(
+          children: [
+            // 1. Group Dropdown
+            _GroupDropdownButton(vm: vm),
+
+            const SizedBox(height: 12),
+
+            // 2. Tombol Create Event
+            if (vm.hasGroups)
+              GestureDetector(
+                onTap: () {
+                  if (vm.currentGroupId == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text("Pilih grup terlebih dahulu")),
+                    );
+                    return;
+                  }
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CreateEventPage(
+                        groupId: vm.currentGroupId!,
+                      ),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _kPrimaryColor,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      )
+                    ],
+                  ),
+                  child: const Column(
+                    children: [
+                      Icon(Icons.add_location_alt_outlined,
+                          color: Colors.white, size: 20),
+                      SizedBox(height: 2),
+                      Text(
+                        "Create",
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        "Event",
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ],
     ),
   );
@@ -996,16 +1068,6 @@ class _FriendListItem extends StatelessWidget {
                   const SizedBox(height: 4),
 
                   // Tampilkan Email (karena lokasi nama tempat tidak ada di model)
-                  Text(
-                    friend.email,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _kGreyText,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
 
                   // Tampilkan Status Text
                   Row(

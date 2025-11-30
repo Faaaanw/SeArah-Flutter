@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:searah_backend/Navigation/navbar.dart';
@@ -67,6 +68,8 @@ class LoginViewModel extends ChangeNotifier {
     if (_isLoading) return;
     _isLoading = true;
     notifyListeners();
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    String? fcmToken = await messaging.getToken();
 
     try {
       final email = emailController.text.trim();
@@ -115,6 +118,10 @@ class LoginViewModel extends ChangeNotifier {
           _showResultDialog(context, 'Login Berhasil! 🎉',
               'Selamat datang, ${userName ?? email}!',
               isSuccess: true);
+        }
+        if (fcmToken != null) {
+          print("Update FCM Token setelah login...");
+          await ApiService.updateFcmToken(fcmToken, token);
         }
 
         // Navigasi ke Navbar setelah dialog
