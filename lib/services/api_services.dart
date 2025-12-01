@@ -405,6 +405,25 @@ class ApiService {
     }
   }
 
+  static Future<List<int>> getSentRequests(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/friends/requests/sent'),
+        headers: _getHeaders(token: token),
+      );
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        // Mengembalikan List<int> berisi ID user yang kita add
+        return List<int>.from(body['data']);
+      }
+      return [];
+    } catch (e) {
+      print("Error getSentRequests: $e");
+      return [];
+    }
+  }
+
   static Future<void> updateUserLocation({
     required int userId,
     required String token,

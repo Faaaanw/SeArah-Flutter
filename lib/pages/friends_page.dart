@@ -96,7 +96,6 @@ class _FriendsPageState extends State<FriendsPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Back Button
-          
 
           const Text(
             'Friend Zone',
@@ -192,53 +191,83 @@ class _FriendsPageState extends State<FriendsPage> {
       {required bool isPending, required bool isSearch}) {
     final viewModel = context.watch<FriendViewModel>();
 
-    // Parsing Data
     final name = item['name'] ?? item['from_name'] ?? 'Tanpa Nama';
     final email = item['email'] ?? item['from_email'] ?? '-';
 
-    // ID Handling
-    final int targetUserId =
-        isPending ? (item['from_id'] ?? item['user_id'] ?? 0) : item['id'];
+    // Pastikan ID diambil dengan aman
+    final int targetUserId = isPending
+        ? (item['from_id'] ?? item['user_id'] ?? 0)
+        : (item['id'] ?? 0);
+
     final int? itemId = item['id'];
 
-    // --- DEKLARASI VARIABEL (Tambahkan isDisabled di sini) ---
-    bool isDisabled = false; // <--- INI YANG KURANG
+    bool isDisabled = false;
     bool showActionButton = false;
     String actionLabel = "";
     IconData actionIcon = Icons.check;
     Color buttonColor = primaryColor;
-    // Unused: Color textColor = Colors.white;
     VoidCallback? onActionTap;
 
-    // --- LOGIKA UTAMA ---
+    // --- LOGIKA UTAMA (UPDATED) ---
     if (isPending) {
-      // 1. Tab Permintaan Masuk
+      // ... (Logika Permintaan Masuk TETAP SAMA) ...
       showActionButton = true;
       actionLabel = "Terima";
       actionIcon = Icons.check_circle_outline;
-      buttonColor = secondaryColor; // Gunakan variable local secondaryColor
+      buttonColor = secondaryColor;
       onActionTap = () async {
         if (token == null || itemId == null) return;
         await _handleAcceptFriend(viewModel, itemId!);
       };
     } else if (isSearch && targetUserId != userId) {
-      // 2. Tab Pencarian
       showActionButton = true;
 
-      // Cek A: Apakah sudah berteman?
-      if (viewModel.isAlreadyFriend(targetUserId)) {
+      // Ambil status langsung dari hasil search (dari backend)
+      // null jika tidak ada hubungan
+      String? serverStatus = item['friendship_status'];
+      bool amISender = item['is_sender'] == true;
+
+      // Cek A: Apakah sudah berteman? (Baik dari Local ViewModel atau Server Status)
+      if (viewModel.isAlreadyFriend(targetUserId) ||
+          serverStatus == 'accepted') {
         actionLabel = "Berteman";
-        actionIcon = Icons.people_alt_outlined;
-        buttonColor = Colors.grey.shade300;
-        isDisabled = true; // Set tombol jadi non-aktif
+        actionIcon = Icons.people_alt;
+        buttonColor = Colors.grey.shade400;
+        isDisabled = true;
       }
-      // Cek B: Apakah dia sudah add kita duluan (Followback)?
+      // 🔥 Cek B (DIPERBAIKI): Apakah statusnya Pending & Kita yang kirim?
+      // Kita cek dari 2 sumber:
+      // 1. Local (viewModel.isRequestSent) -> biar responsif pas baru klik add
+      // 2. Server (serverStatus == 'pending' && amISender) -> biar persisten pas search ulang
+      else if (viewModel.isRequestSent(targetUserId) ||
+          (serverStatus == 'pending' && amISender)) {
+        actionLabel = "Menunggu";
+        actionIcon = Icons.hourglass_top_rounded;
+        buttonColor = const Color(0xFFFFB74D); // Orange
+        isDisabled = true;
+      }
+      // Cek C: Apakah dia yang add kita? (Incoming Request dari Search Result)
+      else if (serverStatus == 'pending' && !amISender) {
+        // Kalau status pending tapi BUKAN kita pengirimnya, berarti dia yg add
+        // Kita kasih tombol Terima
+        // Note: Kita butuh friendship ID untuk terima, untungnya API search biasanya return User ID.
+        // Untuk amannya, tombol ini bisa kita arahkan user cek tab "Request" atau panggil API accept by UserID (kalau ada).
+
+        // Opsi simpel: Tampilkan status "Permintaan Masuk"
+        actionLabel = "Cek Request";
+        actionIcon = Icons.mark_email_unread_outlined;
+        buttonColor = secondaryColor;
+        onActionTap = () {
+          // Pindah ke tab request (index 2)
+          DefaultTabController.of(context).animateTo(2);
+        };
+      }
+      // Cek D: Incoming Request (Logika lama via Local ViewModel)
       else {
         int? incomingFriendshipId =
             viewModel.getIncomingRequestFriendshipId(targetUserId);
 
         if (incomingFriendshipId != null) {
-          // Kasus Followback
           actionLabel = "Terima";
           actionIcon = Icons.check_circle;
           buttonColor = secondaryColor;
@@ -247,7 +276,7 @@ class _FriendsPageState extends State<FriendsPage> {
             await _handleAcceptFriend(viewModel, incomingFriendshipId);
           };
         } else {
-          // Kasus Tambah Teman Baru
+          // Kasus Tambah Teman Baru (Add)
           actionLabel = "Tambah";
           actionIcon = Icons.person_add_outlined;
           buttonColor = primaryColor;
@@ -259,8 +288,10 @@ class _FriendsPageState extends State<FriendsPage> {
       }
     }
 
-    // --- RENDER UI ---
+    // --- RENDER UI (SAMA SEPERTI SEBELUMNYA) ---
     return Container(
+      // ... (Code container UI sama persis, tidak perlu diubah)
+      // Copy-paste sisa return Container dari kode sebelumnya di sini
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       decoration: BoxDecoration(
         color: cardColor,
@@ -349,7 +380,8 @@ class _FriendsPageState extends State<FriendsPage> {
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: isDisabled
-                          ? Colors.transparent
+                          ? Colors.grey
+                              .withOpacity(0.1) // Background abu jika disabled
                           : buttonColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: isDisabled

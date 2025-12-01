@@ -594,7 +594,7 @@ class _FriendListPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = friends.where((f) => f.id != currentUserId).toList();
+    final filtered = friends.where((f) => f.id != currentUserId && f.isFriend).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

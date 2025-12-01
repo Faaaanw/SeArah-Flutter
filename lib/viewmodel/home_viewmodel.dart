@@ -11,11 +11,13 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import '../main.dart';
 
 class HomeViewModel extends ChangeNotifier {
   // ====== State Utama ======
   List<Friend> _allFriends = [];
   List<Friend> _friends = [];
+  List<int> sentRequestIds = [];
   List<Group> _groups = [];
   List<Event> get events => _events;
 
@@ -87,6 +89,9 @@ class HomeViewModel extends ChangeNotifier {
   LatLng get userLocation => _userLocation;
   LatLng get mapCenter => _userLocation;
   LatLng get searchResultLocation => _searchResultLocation ?? _userLocation;
+  bool isRequestSent(int userId) {
+    return sentRequestIds.contains(userId);
+  }
 
   // ====== Lifecycle Safety ======
   bool _disposed = false;
@@ -119,9 +124,14 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   // ====== Setter (dipanggil setelah login) ======
+  // ====== Setter (dipanggil setelah login) ======
   void setUserSession({required int userId, required String token}) {
     _currentUserId = userId;
     _authToken = token;
+
+    // 🔥 WAJIB: Init notifikasi & Update Token begitu sesi aktif
+    setupNotifications();
+
     startLocationUpdates();
     startFriendLocationUpdates();
   }
@@ -221,6 +231,25 @@ class HomeViewModel extends ChangeNotifier {
     } finally {
       _isLoading = false;
       safeNotifyListeners();
+    }
+  }
+
+  // Tambahkan ini di HomeViewModel jika belum ada
+  Future<void> addFriend(int friendId) async {
+    if (_authToken == null || _currentUserId == null) return;
+    try {
+      await ApiService.addFriend(
+        userId: _currentUserId!,
+        friendId: friendId,
+        token: _authToken!,
+      );
+      if (!sentRequestIds.contains(friendId)) {
+        sentRequestIds.add(friendId);
+        notifyListeners();
+      }
+      // Opsional: Refresh data atau update status local
+    } catch (e) {
+      debugPrint("Gagal add friend: $e");
     }
   }
 
@@ -591,22 +620,31 @@ class HomeViewModel extends ChangeNotifier {
   bool get isSearching => _isSearching;
 
   Future<void> fetchSearchSuggestions(String query) async {
+    // 1. Jika kosong, langsung clear (Instant)
     if (query.isEmpty) {
+      _debounceSearch?.cancel(); // Batalkan timer yang berjalan
       _searchResults = [];
-      safeNotifyListeners();
+      _isSearching = false; // Matikan loading
+      notifyListeners(); // Pakai notifyListeners standar jika safeNotifyListeners ribet
       return;
     }
 
+    // 2. Cancel timer sebelumnya jika user masih mengetik
     _debounceSearch?.cancel();
-    _debounceSearch = Timer(const Duration(milliseconds: 400), () async {
+
+    // 3. SET TIMER LEBIH SINGKAT (300ms atau 250ms)
+    _debounceSearch = Timer(const Duration(milliseconds: 300), () async {
+      // Cek Cache dulu (Instant result)
       if (_searchCache.containsKey(query)) {
         _searchResults = _sortByDistance(_searchCache[query]!);
-        safeNotifyListeners();
+        _isSearching = false; // Pastikan loading mati
+        notifyListeners();
         return;
       }
 
+      // Mulai Loading State
       _isSearching = true;
-      safeNotifyListeners();
+      notifyListeners();
 
       try {
         final results = await ApiService.searchLocation(
@@ -615,14 +653,17 @@ class HomeViewModel extends ChangeNotifier {
           lon: _userLocation.longitude,
         );
 
+        // Simpan ke cache
         _searchCache[query] = results;
+
         _searchResults = _sortByDistance(results);
       } catch (e) {
         debugPrint('Error fetchSearchSuggestions: $e');
         _searchResults = [];
       } finally {
+        // Matikan Loading State
         _isSearching = false;
-        safeNotifyListeners();
+        notifyListeners();
       }
     });
   }
@@ -912,11 +953,14 @@ class HomeViewModel extends ChangeNotifier {
 
   // 🔥 FUNGSI BARU: SETUP NOTIFIKASI
   Future<void> setupNotifications() async {
-    if (_authToken == null) return;
+    if (_authToken == null) return; // Guard clause
+
+    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+        FlutterLocalNotificationsPlugin();
 
     FirebaseMessaging messaging = FirebaseMessaging.instance;
 
-    // A. Minta Izin (Android 13+ & iOS)
+    // 1. Minta Izin (Idempotent: aman dipanggil berkali-kali)
     NotificationSettings settings = await messaging.requestPermission(
       alert: true,
       badge: true,
@@ -924,42 +968,63 @@ class HomeViewModel extends ChangeNotifier {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      // B. Ambil Token HP & Kirim ke Backend Laravel
+      print('✅ Izin Notifikasi Diberikan');
+
+      // 2. Init Local Notification
+      const AndroidInitializationSettings initializationSettingsAndroid =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
+
+      const InitializationSettings initializationSettings =
+          InitializationSettings(android: initializationSettingsAndroid);
+
+      await flutterLocalNotificationsPlugin.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+          print("Notifikasi diklik: ${response.payload}");
+        },
+      );
+
+      // 3. 🔥 UPDATE TOKEN KE SERVER (INTI MASALAHNYA DI SINI)
+      // Kita ambil token fresh dari Firebase
       String? fcmToken = await messaging.getToken();
-      print("🔥 FCM TOKEN HP SAYA: $fcmToken");
 
       if (fcmToken != null) {
-        await ApiService.updateFcmToken(fcmToken, _authToken!);
+        print(
+            "🔥 Mengirim FCM TOKEN ke Server: ${fcmToken.substring(0, 10)}...");
+        try {
+          // Pastikan ApiService.updateFcmToken Anda sudah benar
+          await ApiService.updateFcmToken(fcmToken, _authToken!);
+          print("✅ Token FCM berhasil diperbarui di Database");
+        } catch (e) {
+          print("❌ Gagal update token ke server: $e");
+        }
       }
 
-      // C. Listener saat Aplikasi DIBUKA (Foreground)
-      // Agar notifikasi muncul "cling" saat app sedang jalan
+      // 4. Listener Foreground (Saat aplikasi dibuka)
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        print(
+            '📩 Pesan masuk saat aplikasi dibuka: ${message.notification?.title}');
+
         RemoteNotification? notification = message.notification;
         AndroidNotification? android = message.notification?.android;
 
         if (notification != null && android != null) {
-          final FlutterLocalNotificationsPlugin
-              flutterLocalNotificationsPlugin =
-              FlutterLocalNotificationsPlugin();
-
           flutterLocalNotificationsPlugin.show(
             notification.hashCode,
             notification.title,
             notification.body,
             const NotificationDetails(
               android: AndroidNotificationDetails(
-                'high_importance_channel', // ID Channel (Harus sama dgn main.dart)
+                'high_importance_channel',
                 'High Importance Notifications',
-                importance: Importance.high,
+                importance: Importance.max,
                 priority: Priority.high,
                 icon: '@mipmap/ic_launcher',
+                playSound: true,
               ),
             ),
+            payload: jsonEncode(message.data),
           );
-
-          // Refresh data (opsional)
-          refreshData();
         }
       });
     }

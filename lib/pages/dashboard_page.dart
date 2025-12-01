@@ -100,7 +100,7 @@ class DashboardPage extends StatelessWidget {
                     // 4. DAFTAR TEMAN
                     _buildSectionTitle("Your Friend's"),
                     const SizedBox(height: 12),
-                    _buildFriendsList(viewModel),
+                    _buildFriendsList(viewModel, context),
 
                     const SizedBox(height: 24),
 
@@ -482,7 +482,7 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildFriendsList(HomeViewModel viewModel) {
+  Widget _buildFriendsList(HomeViewModel viewModel,BuildContext context) {
     if (viewModel.isLoading) {
       return const Center(
           child: Padding(
@@ -491,16 +491,22 @@ class DashboardPage extends StatelessWidget {
     }
 
     final currentUserId = viewModel.currentUserId;
-    final filteredFriends =
-        viewModel.friends.where((f) => f.id != currentUserId).take(10).toList();
 
-    if (filteredFriends.isEmpty) {
+    // 1. Ambil semua member kecuali diri sendiri
+    final allMembers =
+        viewModel.friends.where((f) => f.id != currentUserId ).toList();
+
+    // 2. Pisahkan Teman vs Bukan Teman
+    final myFriends = allMembers.where((f) => f.isFriend).take(10).toList();
+    final otherMembers = allMembers.where((f) => !f.isFriend).take(10).toList();
+
+    if (allMembers.isEmpty) {
       return Center(
           child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            const Text("Tidak ada teman yang aktif.",
+            const Text("Belum ada anggota lain di grup ini.",
                 style: TextStyle(color: _textGrey)),
             if (viewModel.currentGroupId != null)
               TextButton(
@@ -513,60 +519,132 @@ class DashboardPage extends StatelessWidget {
     }
 
     return Column(
-      children: filteredFriends.map((friend) {
-        String distance = viewModel.getDistanceToFriend(friend);
-        bool isSharing = friend.isSharingLocation;
-        final avatarUrl = _getAvatarUrl(friend.name);
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // --- BAGIAN 1: TEMAN ANDA ---
+        if (myFriends.isNotEmpty) ...[
+          Column(
+            children: myFriends.map((friend) {
+              return _buildMemberCard(context, friend, viewModel,
+                  isFriend: true);
+            }).toList(),
+          ),
+        ],
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-              color: const Color(0xFFFFF0EB),
-              borderRadius: BorderRadius.circular(18)),
-          child: Row(children: [
-            CircleAvatar(
-                radius: 24,
-                backgroundColor: Colors.white,
-                child: CircleAvatar(
-                    radius: 22, backgroundImage: NetworkImage(avatarUrl))),
-            const SizedBox(width: 12),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text(friend.name ?? "Tanpa Nama",
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Color(0xFF2D2D2D))),
-                  const SizedBox(height: 4),
-                  Row(children: [
-                    Icon(isSharing ? Icons.location_on : Icons.location_off,
-                        size: 12,
-                        color: isSharing ? Colors.green : Colors.grey),
-                    const SizedBox(width: 4),
-                    Text(isSharing ? "Sedang aktif" : "Lokasi dimatikan",
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: isSharing ? Colors.black54 : Colors.grey))
-                  ])
-                ])),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              const Icon(Icons.battery_std, size: 14, color: Color(0xFFFF6F4D)),
-              const SizedBox(height: 4),
-              Row(children: [
-                const Icon(Icons.directions_walk,
-                    size: 14, color: Color(0xFFFF6F4D)),
-                const SizedBox(width: 2),
-                Text(distance,
-                    style:
-                        const TextStyle(fontSize: 12, color: Color(0xFF888888)))
-              ])
+        // --- BAGIAN 2: ANGGOTA LAIN (Bukan Teman) ---
+        if (otherMembers.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          _buildSectionTitle("Anggota Lain"), // Judul Section Baru
+          const SizedBox(height: 12),
+          Column(
+            children: otherMembers.map((member) {
+              return _buildMemberCard(context, member, viewModel,
+                  isFriend: false);
+            }).toList(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // --- HELPER WIDGET: KARTU MEMBER ---
+  Widget _buildMemberCard(
+      BuildContext context, Friend member, HomeViewModel viewModel,
+      {required bool isFriend}) {
+    String distance = viewModel.getDistanceToFriend(member);
+    bool isSharing = member.isSharingLocation;
+    final avatarUrl = _getAvatarUrl(member.name);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isFriend
+            ? const Color(0xFFFFF0EB)
+            : Colors.grey.shade50, // Beda warna background
+        borderRadius: BorderRadius.circular(18),
+        border: isFriend
+            ? null
+            : Border.all(
+                color: Colors.grey.shade200), // Border untuk bukan teman
+      ),
+      child: Row(children: [
+        CircleAvatar(
+            radius: 24,
+            backgroundColor: Colors.white,
+            child: CircleAvatar(
+                radius: 22, backgroundImage: NetworkImage(avatarUrl))),
+        const SizedBox(width: 12),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(member.name,
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: Color(0xFF2D2D2D))),
+          const SizedBox(height: 4),
+
+          // Status Lokasi
+          Row(children: [
+            Icon(isSharing ? Icons.location_on : Icons.location_off,
+                size: 12, color: isSharing ? Colors.green : Colors.grey),
+            const SizedBox(width: 4),
+            Text(isSharing ? "Sedang aktif" : "Lokasi dimatikan",
+                style: TextStyle(
+                    fontSize: 12,
+                    color: isSharing ? Colors.black54 : Colors.grey))
+          ])
+        ])),
+
+        // --- TRAILING ACTION ---
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          if (isFriend) ...[
+            // Tampilan jika TEMAN: Baterai & Jarak
+            const Icon(Icons.battery_std, size: 14, color: Color(0xFFFF6F4D)),
+            const SizedBox(height: 4),
+            Row(children: [
+              const Icon(Icons.directions_walk,
+                  size: 14, color: Color(0xFFFF6F4D)),
+              const SizedBox(width: 2),
+              Text(distance,
+                  style:
+                      const TextStyle(fontSize: 12, color: Color(0xFF888888)))
             ])
-          ]),
-        );
-      }).toList(),
+          ] else ...[
+            // Tampilan jika BUKAN TEMAN: Tombol Add Friend
+            InkWell(
+              onTap: () {
+                // Panggil fungsi add friend di ViewModel
+                viewModel.addFriend(member.id);
+                // Tambahkan Snackbar atau feedback visual
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content:
+                        Text("Permintaan teman dikirim ke ${member.name}")));
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _primaryOrange,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.person_add, color: Colors.white, size: 14),
+                    SizedBox(width: 4),
+                    Text("Add",
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            )
+          ]
+        ])
+      ]),
     );
   }
 
@@ -582,19 +660,14 @@ class DashboardPage extends StatelessWidget {
         _buildMenuButton(context, Icons.group_add_outlined, "Buat Grup", () {
           _showGroupModal(context, viewModel);
         }),
-       _buildMenuButton(
-        context, 
-        Icons.notifications_none, 
-        "Notifikasi", 
-        () {
+        _buildMenuButton(context, Icons.notifications_none, "Notifikasi", () {
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => const NotificationPage(),
             ),
           );
-        }
-      ),
+        }),
         _buildMenuButton(context, Icons.settings_outlined, "Pengaturan", () {}),
       ],
     );

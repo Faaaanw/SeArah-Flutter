@@ -3,9 +3,13 @@ import '../services/api_services.dart';
 
 class FriendViewModel extends ChangeNotifier {
   List<dynamic> friends = [];
+  List<int> sentRequestIds = [];
   List<Map<String, dynamic>> pendingRequests =
       []; // Ubah tipe jadi lebih spesifik
   bool isLoading = false;
+  bool isRequestSent(int userId) {
+    return sentRequestIds.contains(userId);
+  }
 
   // --- Load Data ---
 
@@ -15,6 +19,8 @@ class FriendViewModel extends ChangeNotifier {
 
     try {
       friends = await ApiService.getFriends(token);
+      final sentList = await ApiService.getSentRequests(token);
+      sentRequestIds = sentList;
     } catch (e) {
       debugPrint("❌ Gagal ambil teman: $e");
     } finally {
@@ -94,6 +100,10 @@ class FriendViewModel extends ChangeNotifier {
         friendId: friendId,
         token: token,
       );
+      if (!sentRequestIds.contains(friendId)) {
+        sentRequestIds.add(friendId);
+        notifyListeners();
+      }
       return res['message'] ?? 'Berhasil menambah teman';
     } catch (e) {
       return _cleanError(e);

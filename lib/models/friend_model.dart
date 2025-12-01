@@ -6,6 +6,8 @@ class Friend {
   bool isSharingLocation;
   double? latitude;
   double? longitude;
+  final bool isFriend;
+  final bool isMe;
 
   Friend({
     required this.id,
@@ -15,6 +17,8 @@ class Friend {
     this.isSharingLocation = false,
     this.latitude,
     this.longitude,
+    this.isFriend = false,
+    this.isMe = false,
   });
 
   factory Friend.fromJson(Map<String, dynamic> json) {
@@ -51,6 +55,8 @@ class Friend {
       isSharingLocation: parseBool(json['is_sharing_location']),
       latitude: parseDouble(json['latitude']),
       longitude: parseDouble(json['longitude']),
+      isFriend: parseBool(json['is_friend']),
+      isMe: parseBool(json['is_me']),
     );
   }
 
