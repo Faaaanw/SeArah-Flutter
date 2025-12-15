@@ -70,10 +70,24 @@ class ApiService {
         'password_confirmation': confirmPassword,
       }),
     );
+
+    final responseBody = jsonDecode(response.body);
+
     if (response.statusCode == 201) {
-      return jsonDecode(response.body);
+      return responseBody;
+    } else if (response.statusCode == 400 || response.statusCode == 422) {
+      // ✅ Tangani Validasi Laravel (Termasuk DNS check)
+      // Laravel biasanya kirim format: {"message": "...", "errors": {"email": ["..."]}}
+      if (responseBody['errors'] != null) {
+        final errors = responseBody['errors'] as Map<String, dynamic>;
+        // Ambil error pertama yang ketemu (misal: error email)
+        final firstError = errors.values.first[0];
+        throw Exception(firstError);
+      }
+
+      throw Exception(responseBody['message'] ?? 'Validasi gagal.');
     } else {
-      throw Exception('Registrasi gagal: ${response.body}');
+      throw Exception('Gagal mendaftar: ${response.statusCode}');
     }
   }
 

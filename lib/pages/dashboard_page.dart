@@ -11,6 +11,7 @@ import 'package:searah_backend/pages/notification_page.dart';
 import 'package:searah_backend/viewmodel/home_viewmodel.dart';
 import '../models/friend_model.dart';
 import '../models/event_model.dart';
+import 'package:geolocator/geolocator.dart';
 
 // --- Theme Constants ---
 const Color _primaryOrange = Color(0xFFFF6F4D);
@@ -93,7 +94,7 @@ class DashboardPage extends StatelessWidget {
                     const SizedBox(height: 24),
 
                     // 3. STATUS LOKASI
-                    _buildLocationToggle(viewModel),
+                    _buildLocationToggle(context,viewModel),
 
                     const SizedBox(height: 24),
 
@@ -439,7 +440,7 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildLocationToggle(HomeViewModel viewModel) {
+  Widget _buildLocationToggle(BuildContext context, HomeViewModel viewModel) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -473,16 +474,124 @@ class DashboardPage extends StatelessWidget {
                         : Colors.red))
           ]),
         ]),
+
+        // --- BAGIAN YANG DIUBAH ---
         Switch(
             value: viewModel.isUserSharingLocation,
-            onChanged: viewModel.toggleLocationSharing,
+            // Panggil fungsi logic baru, jangan langsung ke viewModel
+            onChanged: (value) =>
+                _onLocationSwitchChanged(context, viewModel, value),
             activeColor: _primaryOrange,
             activeTrackColor: _primaryOrange.withOpacity(0.2))
       ]),
     );
   }
 
-  Widget _buildFriendsList(HomeViewModel viewModel,BuildContext context) {
+  // --- LOGIC BARU: CEK GPS & TAMPILKAN POP-UP ---
+  // --- LOGIC BARU: CEK GPS, PERMISSION, & AUTO-RETRY ---
+  Future<void> _onLocationSwitchChanged(
+      BuildContext context, HomeViewModel viewModel, bool value) async {
+    
+    // 1. Jika user mau MEMATIKAN lokasi, langsung proses
+    if (value == false) {
+      viewModel.toggleLocationSharing(false);
+      return;
+    }
+
+    // 2. Cek apakah GPS (Service) Nyala?
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+    if (!serviceEnabled) {
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false, // User harus milih tombol
+          builder: (ctx) => AlertDialog(
+            title: const Text("Lokasi Tidak Aktif"),
+            content: const Text(
+                "Mohon aktifkan lokasi/GPS dulu untuk menggunakan fitur ini."),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("Batal", style: TextStyle(color: Colors.grey)),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(ctx); // Tutup dialog dulu
+                  
+                  // Buka settingan HP
+                  await Geolocator.openLocationSettings();
+                  
+                  // --- FIX UTAMA DISINI ---
+                  // Beri jeda 1 detik agar HP sempat memproses nyala-nya GPS
+                  await Future.delayed(const Duration(seconds: 1));
+
+                  // Cek ulang secara otomatis setelah kembali dari setting
+                  if (await Geolocator.isLocationServiceEnabled() && context.mounted) {
+                     // Panggil fungsi ini lagi secara REKURSIF (Otomatis nyalakan switch)
+                     _onLocationSwitchChanged(context, viewModel, true);
+                  }
+                },
+                child: const Text("Aktifkan",
+                    style: TextStyle(
+                        color: _primaryOrange, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      }
+      return; // Stop di sini, tunggu user balik dari settings
+    }
+
+    // 3. Cek Izin Aplikasi (Permission)
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text("Izin lokasi diperlukan untuk fitur ini")));
+        }
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (context.mounted) {
+        showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+                  title: const Text("Izin Ditolak Permanen"),
+                  content: const Text(
+                      "Anda memblokir izin lokasi. Mohon buka pengaturan aplikasi untuk mengizinkannya."),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text("Batal")),
+                    TextButton(
+                        onPressed: () => Geolocator.openAppSettings(),
+                        child: const Text("Buka Pengaturan")),
+                  ],
+                ));
+      }
+      return;
+    }
+
+    // 4. Jika semua aman, Jalankan ViewModel
+    // Bungkus dengan try-catch untuk jaga-jaga jika ViewModel error mengambil posisi
+    try {
+      // Opsional: Tampilkan loading kecil jika perlu
+      await viewModel.toggleLocationSharing(true);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+           const SnackBar(content: Text("Gagal mengaktifkan lokasi. Coba sesaat lagi."))
+        );
+      }
+    }
+  }
+
+  Widget _buildFriendsList(HomeViewModel viewModel, BuildContext context) {
     if (viewModel.isLoading) {
       return const Center(
           child: Padding(
@@ -494,7 +603,7 @@ class DashboardPage extends StatelessWidget {
 
     // 1. Ambil semua member kecuali diri sendiri
     final allMembers =
-        viewModel.friends.where((f) => f.id != currentUserId ).toList();
+        viewModel.friends.where((f) => f.id != currentUserId).toList();
 
     // 2. Pisahkan Teman vs Bukan Teman
     final myFriends = allMembers.where((f) => f.isFriend).take(10).toList();

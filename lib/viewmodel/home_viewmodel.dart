@@ -423,7 +423,7 @@ class HomeViewModel extends ChangeNotifier {
     debugPrint('Location updates stopped.');
   }
 
-  void toggleLocationSharing(bool value) async {
+  Future<void> toggleLocationSharing(bool value) async {
     _isUserSharingLocation = value;
 
     if (!value) {

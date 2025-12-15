@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:searah_backend/Navigation/navbar.dart';
 import '../services/api_services.dart';
 import 'package:searah_backend/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,7 +21,7 @@ class RegisterViewModel extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  // Fungsi untuk menampilkan pop-up hasil
+  // 1. KEMBALIKAN FUNGSI DIALOG YANG LENGKAP (Bisa Sukses & Gagal)
   void _showResultDialog(BuildContext context, String title, String message,
       {bool isSuccess = false}) {
     if (!context.mounted) return;
@@ -43,9 +44,9 @@ class RegisterViewModel extends ChangeNotifier {
             TextButton(
               onPressed: () {
                 Navigator.pop(context); // Tutup Dialog
-                // Jika sukses, lakukan navigasi keluar dari halaman register
+                // Jika sukses, kembali ke halaman Login
                 if (isSuccess) {
-                  Navigator.pop(context); // KEMBALI KE LOGIN PAGE
+                  Navigator.pop(context);
                 }
               },
               child: const Text('OK'),
@@ -67,90 +68,47 @@ class RegisterViewModel extends ChangeNotifier {
       final pass = passwordController.text.trim();
       final confirm = confirmController.text.trim();
 
-      // 1. Validasi Input Dasar
+      // Validasi Input
       if (name.isEmpty || email.isEmpty || pass.isEmpty || confirm.isEmpty) {
-        _showResultDialog(context, 'Perhatian', 'Semua field wajib diisi.',
-            isSuccess: false);
+        _showResultDialog(context, 'Perhatian', 'Semua field wajib diisi.');
         return;
       }
 
-      // 2. Validasi Konfirmasi Password
       if (pass != confirm) {
         _showResultDialog(
-            context, 'Perhatian', 'Konfirmasi password tidak cocok.',
-            isSuccess: false);
+            context, 'Perhatian', 'Konfirmasi password tidak cocok.');
         return;
       }
 
-      // 3. Panggilan API
-      final result = await ApiService.register(name, email, pass, confirm);
-      print("Response Register: $result");
+      // 2. Panggilan API
+      // Pastikan Backend Laravel Anda TIDAK mengirim token, tapi mengirim email verifikasi
+      await ApiService.register(name, email, pass, confirm);
 
-      final token = result['token'];
-      // final user = result['user']; // Opsional, tergantung response API
-      final messageRaw = result['message']?.toString() ?? '';
-      final messageLower = messageRaw.toLowerCase();
-
-      // Cek apakah akun sudah ada
-      final bool isAccountExists = messageLower.contains('already exists') ||
-          messageLower.contains('terdaftar');
-
-      // Cek apakah sukses (Bisa dari token, ATAU dari pesan 'berhasil'/'created')
-      // INI PERBAIKAN UTAMANYA: Kita anggap sukses jika ada kata 'berhasil' atau 'created'
-      final bool isSuccessMessage = messageLower.contains('berhasil') ||
-          messageLower.contains('created') ||
-          messageLower.contains('success');
-
-      if (isAccountExists) {
-        // --- KASUS: AKUN SUDAH ADA ---
-        if (context.mounted) {
-          _showResultDialog(context, 'Registrasi Gagal',
-              'Akun dengan email ini sudah terdaftar. Silakan login.',
-              isSuccess: false);
-        }
-      } else if ((token != null) || isSuccessMessage) {
-        // --- KASUS: REGISTRASI BERHASIL (Fix Logic) ---
-        // Masuk sini jika ada token ATAU pesannya positif (seperti di screenshot Anda)
-
-        if (context.mounted) {
-          // Kita tidak perlu simpan sesi login (SharedPreferences) di sini
-          // karena user diminta login ulang secara manual.
-
-          _showResultDialog(context, 'Registrasi Berhasil! 🎉',
-              'Akun berhasil dibuat. Silakan login dengan akun baru Anda.',
-              isSuccess:
-                  true // Ini akan memicu navigasi ke Login saat 'OK' ditekan
-              );
-        }
-      } else {
-        // --- KASUS: GAGAL LAINNYA ---
-        // Jika response 200 tapi pesannya aneh/bukan sukses
-        throw Exception(
-            messageRaw.isNotEmpty ? messageRaw : 'Gagal mendaftar.');
+      // 3. ✅ SUKSES (TAPI BELUM LOGIN)
+      // Kita tidak cek token, karena logic baru mengharuskan verifikasi email dulu.
+      if (context.mounted) {
+        _showResultDialog(context, 'Registrasi Berhasil! 📧',
+            'Link verifikasi telah dikirim ke $email.\n\nSilakan buka email Anda dan klik link tersebut agar akun menjadi aktif, lalu login kembali.',
+            isSuccess:
+                true // Ini akan memicu user kembali ke Login Page saat klik OK
+            );
       }
     } catch (e) {
+      // 4. ERROR HANDLING
       if (context.mounted) {
-        String errorMessage;
-        String errorString = e.toString();
+        String errorMessage = e.toString();
 
-        if (errorString.contains('SocketException') ||
-            errorString.contains('network')) {
-          errorMessage =
-              'Tidak ada koneksi internet. Silakan periksa koneksi Anda.';
-        } else if (errorString.contains('message') &&
-            errorString.contains('{')) {
-          final regex = RegExp(r'"message":"(.*?)"');
-          final match = regex.firstMatch(errorString);
-          errorMessage = match != null && match.groupCount >= 1
-              ? match.group(1)!
-              : 'Gagal mendaftar. Format data tidak valid.';
-        } else {
-          errorMessage = errorString.contains('Exception: ')
-              ? errorString.replaceFirst('Exception: ', '')
-              : 'Terjadi kesalahan server.';
+        if (errorMessage.startsWith('Exception: ')) {
+          errorMessage = errorMessage.replaceFirst('Exception: ', '');
         }
 
-        _showResultDialog(context, 'Registrasi Gagal 😥', errorMessage,
+        if (errorMessage.contains('SocketException') ||
+            errorMessage.contains('Connection refused')) {
+          errorMessage =
+              "Gagal terhubung ke server. Periksa koneksi internet Anda.";
+        }
+
+        _showResultDialog(context, 'Registrasi Gagal', errorMessage,
             isSuccess: false);
       }
     } finally {
