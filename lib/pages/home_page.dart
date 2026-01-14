@@ -1102,13 +1102,7 @@ class _FriendListItem extends StatelessWidget {
                       const Icon(Icons.battery_full,
                           size: 16, color: _kPrimaryColor),
                       const SizedBox(width: 4),
-                      const Text(
-                        "98%", // Dummy
-                        style: TextStyle(
-                            color: _kGreyText,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold),
-                      ),
+                     
                     ],
                   ),
                   const SizedBox(height: 8),

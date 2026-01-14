@@ -164,7 +164,6 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
                                                 Text(friend.name ?? "User", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                                                Text(friend.email ?? "-", style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                                               ],
                                             ),
                                           ),
