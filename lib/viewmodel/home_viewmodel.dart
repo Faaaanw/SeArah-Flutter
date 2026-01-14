@@ -425,7 +425,6 @@ class HomeViewModel extends ChangeNotifier {
 
   Future<void> toggleLocationSharing(bool value) async {
     _isUserSharingLocation = value;
-
     if (!value) {
       // MATIKAN SHARING
       await _sendLocationToServer(

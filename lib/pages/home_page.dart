@@ -1067,9 +1067,7 @@ class _FriendListItem extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
 
-                  // Tampilkan Email (karena lokasi nama tempat tidak ada di model)
-
-                  // Tampilkan Status Text
+                
                   Row(
                     children: [
                       Icon(

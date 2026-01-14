@@ -266,9 +266,7 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                             fontSize: 16,
                             color: _kTextDark)),
                     const SizedBox(height: 2),
-                    Text(member.email ?? '-',
-                        style: TextStyle(
-                            color: Colors.grey.shade500, fontSize: 13)),
+                   
                   ],
                 ),
               ),

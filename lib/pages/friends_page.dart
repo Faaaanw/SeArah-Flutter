@@ -192,7 +192,7 @@ class _FriendsPageState extends State<FriendsPage> {
     final viewModel = context.watch<FriendViewModel>();
 
     final name = item['name'] ?? item['from_name'] ?? 'Tanpa Nama';
-    final email = item['email'] ?? item['from_email'] ?? '-';
+  
 
     // Pastikan ID diambil dengan aman
     final int targetUserId = isPending
@@ -356,16 +356,6 @@ class _FriendsPageState extends State<FriendsPage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      email,
-                      style: const TextStyle(
-                        fontFamily: fontName,
-                        fontSize: 12,
-                        color: textLight,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
                   ],
                 ),
               ),
