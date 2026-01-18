@@ -6,6 +6,7 @@ import 'package:searah_backend/pages/create_event_page.dart';
 import 'package:searah_backend/pages/create_group_page.dart';
 import 'package:searah_backend/pages/event_detail.dart';
 import 'package:searah_backend/pages/friends_page.dart';
+import 'package:searah_backend/services/api_services.dart';
 import '../viewmodel/home_viewmodel.dart';
 import '../models/friend_model.dart';
 import '../models/event_model.dart';
@@ -594,7 +595,8 @@ class _FriendListPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = friends.where((f) => f.id != currentUserId && f.isFriend).toList();
+    final filtered =
+        friends.where((f) => f.id != currentUserId && f.isFriend).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -770,7 +772,6 @@ class _EmptyFriendListPlaceholder extends StatelessWidget {
 class _EventCard extends StatelessWidget {
   final Event? event;
   final LatLng userLocation;
-  // Warna primary
   static const Color _kPrimaryColor = Color(0xFFFA8B60);
 
   const _EventCard({super.key, this.event, required this.userLocation});
@@ -784,10 +785,12 @@ class _EventCard extends StatelessWidget {
         LatLng(event!.locationLatitude, event!.locationLongitude);
     final double km = distanceCalc(userLocation, eventLatLng) / 1000;
 
-    // Helper format waktu & tanggal
+    // Helper format waktu
     String formatTime(DateTime? dt) => dt == null
         ? "--:--"
         : "${dt.hour.toString().padLeft(2, '0')}.${dt.minute.toString().padLeft(2, '0')}";
+
+    // Helper format tanggal
     String formatDate(DateTime? dt) {
       if (dt == null) return "--";
       final months = [
@@ -807,6 +810,14 @@ class _EventCard extends StatelessWidget {
       return "${dt.day} ${months[dt.month - 1]} ${dt.year}";
     }
 
+    // 🔧 LOGIC URL GAMBAR YANG AMAN
+    String? getPhotoUrl() {
+      if (event?.photo == null || event!.photo!.isEmpty) return null;
+
+      // Karena sekarang Backend sudah mengirim Full URL, langsung return saja
+      return event!.photo;
+    }
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -817,9 +828,7 @@ class _EventCard extends StatelessWidget {
         );
       },
       child: Container(
-        // Tidak perlu height fix disini, ikut parent
-        // 🔥 PADDING OPTIMAL: Tidak terlalu besar agar muat banyak teks
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        padding: const EdgeInsets.all(12), // Mengurangi padding agar lebih luas
         decoration: BoxDecoration(
             color: _kPrimaryColor,
             borderRadius: BorderRadius.circular(20),
@@ -837,55 +846,84 @@ class _EventCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                // Gambar Kecil
+                // --- 1. GAMBAR (Updated) ---
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
-                    width: 80, // Lebar gambar proporsional
+                    width: 80,
                     height: 80,
-                    color: Colors.white,
-                    child: Image.asset('assets/images/event_placeholder.png',
-                        fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) =>
-                            const Icon(Icons.image, color: Colors.grey)),
+                    color: Colors.white, // Background putih saat loading
+                    child: getPhotoUrl() != null
+                        ? Image.network(
+                            getPhotoUrl()!,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return const Center(
+                                child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: _kPrimaryColor)),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              // Fallback jika gagal load network
+                              return Image.asset(
+                                'assets/images/event_placeholder.jpg',
+                                fit: BoxFit.cover,
+                              );
+                            },
+                          )
+                        : Image.asset(
+                            'assets/images/event_placeholder.jpg',
+                            fit: BoxFit.cover,
+                          ),
                   ),
                 ),
                 const SizedBox(width: 12),
 
-                // Info Text
+                // --- 2. TEXT INFO ---
                 Expanded(
                   child: Column(
-                    // 🔥 ALIGNMENT: Rata Kiri & Tengah Vertikal
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      // Title
                       Padding(
-                        padding: const EdgeInsets.only(
-                            right: 40.0), // Space untuk badge jarak
-                        child: Text(event?.title ?? 'Event',
-                            style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
+                        padding:
+                            const EdgeInsets.only(right: 40.0), // Space badge
+                        child: Text(
+                          event?.title ?? 'Event',
+                          style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       const SizedBox(height: 6),
+                      // Info Rows
                       _iconText(
                           Icons.calendar_today, formatDate(event?.startTime)),
                       const SizedBox(height: 2),
                       _iconText(Icons.access_time,
                           "${formatTime(event?.startTime)} - ${formatTime(event?.endTime)}"),
                       const SizedBox(height: 2),
-                      _iconText(
-                          Icons.location_on, event?.locationName ?? "Location"),
+                      // Tambah padding kanan agar tidak tertutup badge 'Joined'
+                      Padding(
+                        padding: const EdgeInsets.only(right: 50.0),
+                        child: _iconText(Icons.location_on,
+                            event?.locationName ?? "Location"),
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
 
-            // Badge Jarak (Pojok Kanan Atas)
+            // Badge Jarak (Kanan Atas)
             Positioned(
               top: 0,
               right: 0,
@@ -902,7 +940,7 @@ class _EventCard extends StatelessWidget {
               ),
             ),
 
-            // Indikator Joined (Pojok Kanan Bawah)
+            // Indikator Joined / Arrow (Kanan Bawah)
             if (event!.isJoined)
               Positioned(
                 bottom: 0,
@@ -930,7 +968,6 @@ class _EventCard extends StatelessWidget {
                 ),
               )
             else
-              // Tombol View Kecil jika belum join
               Positioned(
                 bottom: 0,
                 right: 0,
@@ -950,15 +987,18 @@ class _EventCard extends StatelessWidget {
   }
 
   Widget _iconText(IconData icon, String text) {
-    return Row(children: [
-      Icon(icon, color: Colors.white70, size: 12),
-      const SizedBox(width: 4),
-      Expanded(
+    return Row(
+      children: [
+        Icon(icon, color: Colors.white70, size: 12),
+        const SizedBox(width: 4),
+        Expanded(
           child: Text(text,
               style: const TextStyle(color: Colors.white, fontSize: 11),
               maxLines: 1,
-              overflow: TextOverflow.ellipsis))
-    ]);
+              overflow: TextOverflow.ellipsis),
+        )
+      ],
+    );
   }
 }
 
@@ -1066,8 +1106,6 @@ class _FriendListItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-
-                
                   Row(
                     children: [
                       Icon(
@@ -1102,7 +1140,6 @@ class _FriendListItem extends StatelessWidget {
                       const Icon(Icons.battery_full,
                           size: 16, color: _kPrimaryColor),
                       const SizedBox(width: 4),
-                     
                     ],
                   ),
                   const SizedBox(height: 8),

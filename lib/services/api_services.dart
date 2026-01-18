@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:searah_backend/models/event_model.dart';
 import 'package:searah_backend/models/friend_model.dart';
@@ -152,6 +153,41 @@ class ApiService {
 
     if (response.statusCode != 200) {
       throw Exception('Gagal update nama: ${response.body}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> updatePhoto({
+    required String token,
+    required File imageFile,
+  }) async {
+    // Gunakan MultipartRequest untuk upload file
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/user/update-photo'), // Sesuaikan route Laravel Anda
+    );
+
+    // Tambahkan Header
+    request.headers.addAll({
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+    });
+
+    // Tambahkan File
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'photo', // Harus sama dengan nama field di $request->validate Laravel
+        imageFile.path,
+      ),
+    );
+
+    // Kirim Request
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Gagal mengunggah foto: ${response.body}');
     }
   }
 
@@ -517,34 +553,46 @@ class ApiService {
     required double lat,
     required double lng,
     required DateTime startTime,
-    required DateTime endTime, // 🆕
+    required DateTime endTime,
+    File? imageFile, // 🆕 File foto dari gallery
   }) async {
-    final eventData = {
-      'group_id': groupId,
-      'title': title,
-      'description': description,
-      'location_name': locationName,
-      'location_latitude': lat,
-      'location_longitude': lng,
-      'start_time':
-          startTime.toIso8601String().substring(0, 19).replaceFirst('T', ' '),
-      'end_time': endTime
-          .toIso8601String()
-          .substring(0, 19)
-          .replaceFirst('T', ' '), // 🆕
-    };
+    var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/events'));
 
-    final response = await http.post(
-      Uri.parse('$baseUrl/events'),
-      headers: _getHeaders(token: token, isJson: true),
-      body: jsonEncode(eventData),
-    );
+    // 1. Headers
+    request.headers.addAll(_getHeaders(token: token));
+
+    // 2. Field Teks (MultipartRequest harus string)
+    request.fields['group_id'] = groupId.toString();
+    request.fields['title'] = title;
+    request.fields['description'] = description ?? "";
+    request.fields['location_name'] = locationName ?? "";
+    request.fields['location_latitude'] = lat.toString();
+    request.fields['location_longitude'] = lng.toString();
+
+    // Format tanggal untuk Laravel (YYYY-MM-DD HH:MM:SS)
+    request.fields['start_time'] =
+        startTime.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
+    request.fields['end_time'] =
+        endTime.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
+
+    // 3. Tambahkan Foto (MultipartFile) jika ada
+    if (imageFile != null) {
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'photo', // ⚠️ Harus sama dengan $request->file('photo') di Laravel
+          imageFile.path,
+        ),
+      );
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 201) {
       return Event.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(
-          jsonDecode(response.body)['message'] ?? 'Gagal membuat event.');
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['message'] ?? 'Gagal membuat event.');
     }
   }
 

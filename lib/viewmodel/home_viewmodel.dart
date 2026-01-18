@@ -11,7 +11,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import '../main.dart';
+import 'dart:io';
 
 class HomeViewModel extends ChangeNotifier {
   // ====== State Utama ======
@@ -829,6 +829,7 @@ class HomeViewModel extends ChangeNotifier {
     required int groupId,
     required String title,
     String? description,
+    File? imageFile, // 🆕 Sesuaikan nama parameter agar konsisten (imageFile)
     required double latitude,
     required double longitude,
     String? locationName,
@@ -837,21 +838,34 @@ class HomeViewModel extends ChangeNotifier {
   }) async {
     if (_authToken == null) throw Exception("Token tidak ditemukan");
 
-    final event = await ApiService.createEvent(
-      token: _authToken!,
-      groupId: groupId,
-      title: title,
-      description: description,
-      locationName: locationName,
-      lat: latitude,
-      lng: longitude,
-      startTime: startTime,
-      endTime: endTime,
-    );
+    try {
+      _isLoading = true;
+      notifyListeners();
 
-    await fetchEvents(groupId);
+      final event = await ApiService.createEvent(
+        token: _authToken!,
+        groupId: groupId,
+        title: title,
+        description: description,
+        locationName: locationName,
+        lat: latitude,
+        lng: longitude,
+        startTime: startTime,
+        endTime: endTime,
+        imageFile: imageFile, // 🚀 TERUSKAN KE SERVICE
+      );
 
-    return event;
+      // Refresh list event setelah berhasil tambah
+      await fetchEvents(groupId);
+
+      return event;
+    } catch (e) {
+      debugPrint("❌ Error createEvent di ViewModel: $e");
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
   // Di dalam class HomeViewModel
 

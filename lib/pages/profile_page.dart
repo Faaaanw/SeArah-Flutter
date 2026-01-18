@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:searah_backend/pages/login_page.dart';
 import 'package:searah_backend/viewmodel/home_viewmodel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:searah_backend/models/user_model.dart';
 import 'package:searah_backend/services/api_services.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -62,10 +64,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token');
-
-    // 2. 🛑 PANGGIL CLEAR SESSION DI HOMEVIEWMODEL 🛑
-    // Ini akan menghentikan semua timer, streaming GPS, dan polling teman.
-    homeViewModel.clearSession(); 
+    homeViewModel.clearSession();
 
     // 3. Panggil API Logout (optional)
     if (token != null) {
@@ -89,6 +88,47 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Future<void> _pickAndUploadImage() async {
+    final picker = ImagePicker();
+    final XFile? pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 50,
+    );
+
+    if (pickedFile != null) {
+      setState(() => isLoading = true);
+
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final token = prefs.getString('auth_token');
+
+        if (token != null) {
+          final result = await ApiService.updatePhoto(
+            token: token,
+            imageFile: File(pickedFile.path),
+          );
+          // Update state user dengan data baru dari server
+          if (result['user'] != null) {
+            setState(() {
+              user = User.fromJson(result['user']);
+            });
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Foto profil berhasil diperbarui")),
+          );
+        }
+      } catch (e) {
+        print("Error upload: $e");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Gagal mengunggah foto: $e")),
+        );
+      } finally {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
@@ -99,6 +139,23 @@ class _ProfilePageState extends State<ProfilePage> {
 
     final name = user?.name ?? "Guest User";
     final email = user?.email ?? "-";
+    final String? photo = user?.photo;
+    // Logika penentuan URL Gambar
+    ImageProvider getImageProvider() {
+      if (photo != null && photo.isNotEmpty) {
+        if (photo.startsWith('http')) {
+          // Jika foto dari Google (sudah berupa URL lengkap)
+          return NetworkImage(photo);
+        } else {
+          // Jika foto dari upload Laravel (butuh prefix server)
+          // Ganti 'http://10.0.2.2:8000' dengan base URL API Anda
+          return NetworkImage(
+              "https://unabrogable-atoneable-lashell.ngrok-free.dev/storage/$photo");
+        }
+      }
+      // Fallback jika tidak ada foto sama sekali
+      return NetworkImage("https://i.pravatar.cc/200?u=$email");
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFF0F5),
@@ -111,8 +168,24 @@ class _ProfilePageState extends State<ProfilePage> {
               // ===== AVATAR =====
               CircleAvatar(
                 radius: 60,
-                backgroundImage:
-                    NetworkImage("https://i.pravatar.cc/200?u=$email"),
+                backgroundImage: getImageProvider(),
+                backgroundColor: Colors.grey[200],
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: _pickAndUploadImage, // Kita buat fungsi ini di bawah
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: const BoxDecoration(
+                      color: Colors.pink,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.camera_alt,
+                        color: Colors.white, size: 20),
+                  ),
+                ),
               ),
 
               const SizedBox(height: 15),

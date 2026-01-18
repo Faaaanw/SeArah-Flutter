@@ -4,6 +4,7 @@ class Event {
   final int groupId;
   final String title;
   final String? description;
+  final String? photo;
   final String? locationName;
   final double locationLatitude;
   final double locationLongitude;
@@ -15,6 +16,11 @@ class Event {
   final int participantsCount;
   // ⭐ FIX: Properti ini wajib ada dan dihandle null-nya
   final List<dynamic> participants;
+  String? get fullPhotoUrl {
+    if (photo == null || photo!.isEmpty) return null;
+    if (photo!.startsWith('http')) return photo; // Jika sudah URL lengkap
+    return "https://unabrogable-atoneable-lashell.ngrok-free.dev/storage/$photo";
+  }
 
   Event({
     this.id,
@@ -22,6 +28,7 @@ class Event {
     required this.groupId,
     required this.title,
     this.description,
+    this.photo,
     this.locationName,
     required this.locationLatitude,
     required this.locationLongitude,
@@ -37,19 +44,21 @@ class Event {
 
   factory Event.fromJson(Map<String, dynamic> json) {
     return Event(
-      id: json['id'],
-      creatorId: json['creator_id'],
-      groupId: json['group_id'],
-      title: json['title'],
+      // Gunakan _parseInt untuk semua yang bertipe int
+      id: _parseInt(json['id']),
+      creatorId: _parseInt(json['creator_id']) ?? 0,
+      groupId: _parseInt(json['group_id']) ?? 0,
+
+      title: json['title'] ?? "",
       description: json['description'],
+      photo: json['photo'],
       locationName: json['location_name'],
       locationLatitude: _parseDouble(json['location_latitude']),
       locationLongitude: _parseDouble(json['location_longitude']),
       startTime: DateTime.parse(json['start_time']),
       endTime: DateTime.parse(json['end_time']),
       isJoined: json['is_joined'] ?? false,
-      participantsCount: json['participants_count'] ?? 0,
-      // ⭐ FIX UTAMA: Gunakan '?? []' agar tidak crash jika API mengirim null
+      participantsCount: _parseInt(json['participants_count']) ?? 0,
       participants: json['participants'] ?? [],
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
@@ -60,6 +69,15 @@ class Event {
     );
   }
 
+// Tambahkan helper ini di bawah _parseDouble
+  static int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    if (value is double) return value.toInt();
+    return null;
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -67,6 +85,7 @@ class Event {
       'group_id': groupId,
       'title': title,
       'description': description,
+      'photo': photo,
       'location_name': locationName,
       'location_latitude': locationLatitude,
       'location_longitude': locationLongitude,
@@ -88,6 +107,7 @@ class Event {
       groupId: map['group_id'],
       title: map['title'],
       description: map['description'],
+      photo: map['photo'],
       locationName: map['location_name'],
       locationLatitude: _parseDouble(map['location_latitude']),
       locationLongitude: _parseDouble(map['location_longitude']),

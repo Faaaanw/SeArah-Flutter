@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../viewmodel/home_viewmodel.dart';
+import 'package:image_picker/image_picker.dart';
 import 'dart:async';
 
 // --- Konstanta Warna & Font ---
@@ -30,6 +33,8 @@ class CreateEventPage extends StatefulWidget {
 class _CreateEventPageState extends State<CreateEventPage> {
   final titleC = TextEditingController();
   final descC = TextEditingController();
+  File? _imageFile;
+  final ImagePicker _picker = ImagePicker();
 
   // State untuk Lokasi
   LatLng? _selectedLocation;
@@ -45,6 +50,19 @@ class _CreateEventPageState extends State<CreateEventPage> {
   String get _formattedEndTime => endTime == null
       ? "Pilih Waktu Selesai"
       : DateFormat('dd MMM yyyy HH:mm').format(endTime!);
+
+  Future<void> _pickImage() async {
+    final XFile? pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70, // Kompres agar tidak terlalu berat
+    );
+
+    if (pickedFile != null) {
+      setState(() {
+        _imageFile = File(pickedFile.path);
+      });
+    }
+  }
 
   // --- Fungsi Navigasi ke Map Picker ---
   Future<void> _openLocationPicker() async {
@@ -124,6 +142,8 @@ class _CreateEventPageState extends State<CreateEventPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            _buildImagePickerSection(),
+            const SizedBox(height: 16),
             // --- Input Title ---
             _buildTextField(titleC, "Event Title", Icons.celebration),
             const SizedBox(height: 16),
@@ -152,6 +172,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
             const SizedBox(height: 40),
 
             // --- Create Event Button ---
+            // --- Create Event Button ---
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: _kPrimaryColor,
@@ -160,66 +181,154 @@ class _CreateEventPageState extends State<CreateEventPage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              onPressed: () async {
-                // Validasi Input
-                if (titleC.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Title wajib diisi')));
-                  return;
-                }
-                if (_selectedLocation == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Lokasi wajib dipilih')));
-                  return;
-                }
-                if (startTime != null &&
-                    endTime != null &&
-                    endTime!.isBefore(startTime!)) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content:
-                          Text('Waktu Selesai harus setelah Waktu Mulai')));
-                  return;
-                }
+              // 1. Disable tombol jika sedang loading
+              onPressed: vm.isLoading
+                  ? null
+                  : () async {
+                      // --- Validasi Input ---
+                      if (titleC.text.isEmpty) {
+                        _showErrorSnackBar('Title wajib diisi');
+                        return;
+                      }
+                      if (_selectedLocation == null) {
+                        _showErrorSnackBar('Lokasi wajib dipilih');
+                        return;
+                      }
+                      // Tambahkan pengecekan apakah tanggal sudah dipilih
+                      if (startTime == null || endTime == null) {
+                        _showErrorSnackBar(
+                            'Waktu Mulai dan Selesai wajib ditentukan');
+                        return;
+                      }
+                      if (endTime!.isBefore(startTime!)) {
+                        _showErrorSnackBar(
+                            'Waktu Selesai harus setelah Waktu Mulai');
+                        return;
+                      }
 
-                final start =
-                    startTime ?? DateTime.now().add(const Duration(hours: 1));
-                final end =
-                    endTime ?? DateTime.now().add(const Duration(hours: 2));
+                      try {
+                        // Panggil ViewModel untuk create event
+                        final event = await vm.createEvent(
+                          groupId: widget.groupId,
+                          title: titleC.text,
+                          description:
+                              descC.text.trim().isEmpty ? null : descC.text,
+                          imageFile: _imageFile, // 👈 Sudah benar mengirim File
+                          startTime: startTime!,
+                          endTime: endTime!,
+                          latitude: _selectedLocation!.latitude,
+                          longitude: _selectedLocation!.longitude,
+                          locationName: _selectedAddress,
+                        );
 
-                try {
-                  // Panggil ViewModel untuk create event
-                  final event = await vm.createEvent(
-                    groupId: widget.groupId,
-                    title: titleC.text,
-                    description: descC.text.isEmpty ? null : descC.text,
-                    startTime: start,
-                    endTime: end,
-                    latitude: _selectedLocation!.latitude,
-                    longitude: _selectedLocation!.longitude,
-                    locationName: _selectedAddress,
-                  );
+                        // Jika ada fungsi setCurrentEvent di ViewModel
+                        vm.setCurrentEvent(event);
 
-                  vm.setCurrentEvent(event);
-                  if (context.mounted) Navigator.pop(context);
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Gagal membuat event: $e')),
-                    );
-                  }
-                }
-              },
-              child: const Text("Create Event",
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: _kPoppinsFontFamily)),
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('✅ Event berhasil dibuat!')),
+                          );
+                          Navigator.pop(context);
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          _showErrorSnackBar('Gagal membuat event: $e');
+                        }
+                      }
+                    },
+              // 2. Tampilkan Spinner jika vm.isLoading bernilai true
+              child: vm.isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Text(
+                      "Create Event",
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: _kPoppinsFontFamily),
+                    ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+      ),
+    );
+  }
+
+  Widget _buildImagePickerSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("Event Cover (Opsional)",
+            style: TextStyle(
+                fontWeight: FontWeight.bold, fontFamily: _kPoppinsFontFamily)),
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: _pickImage,
+          child: Container(
+            height: 180,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(
+                  color: Colors.grey.shade300,
+                  width: 2,
+                  style: BorderStyle.solid),
+            ),
+            child: _imageFile != null
+                ? Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(13),
+                        child: Image.file(_imageFile!, fit: BoxFit.cover),
+                      ),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: CircleAvatar(
+                          backgroundColor: Colors.black54,
+                          child: IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white),
+                            onPressed: () => setState(() => _imageFile = null),
+                          ),
+                        ),
+                      )
+                    ],
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_a_photo_outlined,
+                          size: 40, color: Colors.grey.shade400),
+                      const SizedBox(height: 8),
+                      Text("Tap to add photo",
+                          style: TextStyle(color: Colors.grey.shade500)),
+                    ],
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showSnackBar(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   // --- Widget TextField Standar ---
