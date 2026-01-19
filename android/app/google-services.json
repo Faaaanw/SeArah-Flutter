@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "976569806862",
+    "project_id": "searah-app",
+    "storage_bucket": "searah-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:976569806862:android:aa17144b99ae0a641f0c5f",
+        "android_client_info": {
+          "package_name": "com.example.searah_backend"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBvR2wxWllSpTDKvUj8tqYLahDq4yLl3Dc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
