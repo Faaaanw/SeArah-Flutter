@@ -4,10 +4,12 @@ import 'package:intl/intl.dart';
 import 'package:searah_backend/models/event_model.dart';
 import 'package:searah_backend/viewmodel/home_viewmodel.dart';
 
+const Color _kPrimaryColor = Color(0xFFFA8B60); // Orange Coral
 class EventDetailPage extends StatelessWidget {
   final Event event;
 
   const EventDetailPage({super.key, required this.event});
+  
 
   // ----------------------------------------------------------------------
   // FUNGSI POPUP DAFTAR PESERTA
@@ -95,7 +97,6 @@ class EventDetailPage extends StatelessWidget {
                                   ),
                                 ),
                                 title: Text(name),
-                              
                                 trailing: memberId == currentEvent.creatorId
                                     ? Container(
                                         padding: const EdgeInsets.symmetric(
@@ -182,6 +183,12 @@ class EventDetailPage extends StatelessWidget {
           (e) => e.id == event.id,
           orElse: () => event,
         );
+        String? getPhotoUrl() {
+          if (event?.photo == null || event!.photo!.isEmpty) return null;
+
+          // Karena sekarang Backend sudah mengirim Full URL, langsung return saja
+          return event!.photo;
+        }
 
         final String creatorName = vm.getCreatorName(currentEvent.creatorId);
 
@@ -223,12 +230,32 @@ class EventDetailPage extends StatelessWidget {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: Image.asset(
-                      'assets/images/event_placeholder.png',
-                      fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) =>
-                          const Icon(Icons.image, size: 50, color: Colors.grey),
-                    ),
+                    child: getPhotoUrl() != null
+                        ? Image.network(
+                            getPhotoUrl()!,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return const Center(
+                                child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: _kPrimaryColor)),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              // Fallback jika gagal load network
+                              return Image.asset(
+                                'assets/images/event_placeholder.jpg',
+                                fit: BoxFit.cover,
+                              );
+                            },
+                          )
+                        : Image.asset(
+                            'assets/images/event_placeholder.jpg',
+                            fit: BoxFit.cover,
+                          ),
                   ),
                 ),
                 const SizedBox(height: 20),

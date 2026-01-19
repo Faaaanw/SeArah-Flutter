@@ -4,8 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:searah_backend/models/event_model.dart';
 import 'package:searah_backend/models/friend_model.dart';
 import 'package:searah_backend/models/group_model.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
 
 class ApiService {
   //api route

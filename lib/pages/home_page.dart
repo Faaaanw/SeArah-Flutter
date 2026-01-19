@@ -6,7 +6,6 @@ import 'package:searah_backend/pages/create_event_page.dart';
 import 'package:searah_backend/pages/create_group_page.dart';
 import 'package:searah_backend/pages/event_detail.dart';
 import 'package:searah_backend/pages/friends_page.dart';
-import 'package:searah_backend/services/api_services.dart';
 import '../viewmodel/home_viewmodel.dart';
 import '../models/friend_model.dart';
 import '../models/event_model.dart';
@@ -15,8 +14,6 @@ import '../models/event_model.dart';
 const Color _kPrimaryColor = Color(0xFFFA8B60); // Orange Coral
 const Color _kBgCreamColor = Color(0xFFFFF6E5); // Krem Background Card Teman
 const Color _kTextColor = Color(0xFF5D4037); // Coklat Tua untuk Teks
-const Color _kGreyText = Color(0xFFA1887F); // Abu-abu kecoklatan
-const Color _kInfoColor = Color(0xFF2E7D32); // Hijau Tua untuk status "Going"
 
 class HomePageWidget extends StatelessWidget {
   const HomePageWidget({super.key});
@@ -83,11 +80,7 @@ class _HomeViewState extends State<_HomeView> {
         .toList()
       ..sort((a, b) => b.startTime!.compareTo(a.startTime!));
 
-    // Bottom panel logic
-    // Bottom panel logic
     Widget bottomPanelContent;
-
-// 🔥 PERBAIKAN LOGIC UTAMA BOTTOM PANEL
     if (vm.isLoading || vm.isEventLoading) {
       bottomPanelContent = const Center(child: CircularProgressIndicator());
     } else if (!vm.hasGroups) {

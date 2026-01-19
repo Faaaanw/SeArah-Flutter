@@ -6,7 +6,6 @@ import '../services/api_services.dart';
 import '../models/friend_model.dart';
 import '../models/group_model.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -20,6 +19,8 @@ class HomeViewModel extends ChangeNotifier {
   List<int> sentRequestIds = [];
   List<Group> _groups = [];
   List<Event> get events => _events;
+  bool _isInitialized = false; // 🔥 Tambahkan ini
+  bool get isInitialized => _isInitialized;
 
   List<Event> _events = [];
   LatLng? selectedEventLocation;
@@ -144,6 +145,7 @@ class HomeViewModel extends ChangeNotifier {
     _friends = [];
     _groups = [];
     _isLoading = false;
+    _isInitialized = false;
     _isUserSharingLocation = true;
     isLoadingFriends = false;
     _isLoadingGroups = false;
@@ -301,6 +303,7 @@ class HomeViewModel extends ChangeNotifier {
       debugPrint("Error loading data: $e");
     } finally {
       _isLoading = false;
+      _isInitialized = true; // Tandai sudah inisialisasi
       safeNotifyListeners();
     }
   }
@@ -870,13 +873,9 @@ class HomeViewModel extends ChangeNotifier {
   // Di dalam class HomeViewModel
 
   String getCreatorName(int creatorId) {
-    // 1. Cek apakah creator adalah User yang sedang login
     if (_currentUserId != null && creatorId == _currentUserId) {
       return "Anda"; // Atau ambil dari _currentUserName
     }
-
-    // 2. Cari di list _friends (yang isinya member grup saat ini)
-    // Kita pakai lookup sederhana
     try {
       final creator = _friends.firstWhere((friend) => friend.id == creatorId);
       return creator.name ?? "Tanpa Nama";

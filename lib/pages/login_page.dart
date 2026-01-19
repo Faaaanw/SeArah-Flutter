@@ -2,17 +2,14 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:searah_backend/Navigation/navbar.dart';
-import 'package:searah_backend/pages/home_page.dart';
 import 'package:searah_backend/pages/register_page.dart';
 import 'package:searah_backend/viewmodel/home_viewmodel.dart';
 import '../services/api_services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:searah_backend/main.dart'; // supaya bisa akses navigatorKey
 
 // ====== Konstanta Warna ======
-const Color _kPeachIconColor = Color(0xFFBFA4A0);
 const Color _kFieldBackgroundColor = Color(0xFFFDE5DC);
 const Color _kPrimaryButtonColor = Color(0xFFFA8B60);
 const Color _kDividerColor = Color(0xFFE0E0E0);

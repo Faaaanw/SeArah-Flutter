@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:searah_backend/pages/dashboard_page.dart';
 import 'package:searah_backend/pages/home_page.dart';
 import 'package:searah_backend/pages/friends_page.dart';
-import 'package:searah_backend/pages/notification_page.dart';
 import 'package:searah_backend/pages/profile_page.dart';
 import 'package:searah_backend/viewmodel/home_viewmodel.dart';
 

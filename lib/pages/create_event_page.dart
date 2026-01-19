@@ -327,9 +327,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
     );
   }
 
-  void _showSnackBar(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
+  
 
   // --- Widget TextField Standar ---
   Widget _buildTextField(

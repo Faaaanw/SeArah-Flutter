@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:searah_backend/Navigation/navbar.dart';
 import '../services/api_services.dart';
-import 'package:searah_backend/main.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 // import '../Navigation/navbar.dart'; // Tidak dibutuhkan lagi jika navigasi ke Login
 // import '../viewmodel/home_viewmodel.dart'; // Tidak dibutuhkan jika tidak langsung login
 

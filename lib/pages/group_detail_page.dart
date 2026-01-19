@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:searah_backend/viewmodel/home_viewmodel.dart';
 // Sesuaikan import model Anda
-import '../models/friend_model.dart'; 
 
 // --- Theme Constants ---
 const Color _kPrimaryOrange = Color(0xFFFF6F4D);
