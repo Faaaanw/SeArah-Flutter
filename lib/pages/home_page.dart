@@ -9,6 +9,7 @@ import 'package:searah_backend/pages/friends_page.dart';
 import '../viewmodel/home_viewmodel.dart';
 import '../models/friend_model.dart';
 import '../models/event_model.dart';
+import 'package:shimmer/shimmer.dart';
 
 // --- Konstanta Warna (Disesuaikan dengan Target Desain) ---
 const Color _kPrimaryColor = Color(0xFFFA8B60); // Orange Coral
@@ -34,11 +35,22 @@ class _HomeView extends StatefulWidget {
 class _HomeViewState extends State<_HomeView> {
   late PageController _pageController;
   int _currentIndex = 0;
+  bool _isFirstLoad = true;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(viewportFraction: 1.0);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final vm = context.read<HomeViewModel>();
+      await vm.initializeHomeData();
+      if (mounted) {
+        setState(() {
+          _isFirstLoad = false;
+        });
+      }
+    });
   }
 
   @override
@@ -73,58 +85,75 @@ class _HomeViewState extends State<_HomeView> {
   Widget build(BuildContext context) {
     final vm = context.watch<HomeViewModel>();
     final now = DateTime.now();
-    // Urutkan event
+
+    // 1. Urutkan event yang valid
     final sortedEvents = List<Event>.from(vm.events)
-        .where((e) =>
-            e.endTime != null && e.endTime!.isAfter(now)) // 🔥 FILTER DISINI
+        .where((e) => e.endTime != null && e.endTime!.isAfter(now))
         .toList()
       ..sort((a, b) => b.startTime!.compareTo(a.startTime!));
 
+    // 2. Cek status loading global
+    bool isGlobalLoading = vm.isLoading || vm.isEventLoading || _isFirstLoad;
+
+    // 3. Panel Putih tetap muncul jika user punya grup ATAU sedang loading
+    // Ini menjaga agar panel tidak hilang saat refresh/init
+    bool showBottomPanel = vm.hasGroups || isGlobalLoading;
+
+    // 4. Event Card Logic
+    bool showEventCard =
+        showBottomPanel && sortedEvents.isNotEmpty && !isGlobalLoading;
+
+    // --- LOGIC PENENTUAN ISI PANEL (MODIFIED) ---
     Widget bottomPanelContent;
-    if (vm.isLoading || vm.isEventLoading) {
-      bottomPanelContent = const Center(child: CircularProgressIndicator());
+
+    if (isGlobalLoading) {
+      // 🔥 PERUBAHAN UTAMA:
+      // Saat loading, JANGAN pakai CircularProgressIndicator.
+      // Tetap panggil _FriendListPanel dengan isLoading: true agar Shimmer muncul.
+      bottomPanelContent = _FriendListPanel(
+        friends: vm.friends, // List boleh kosong, shimmer akan menutupinya
+        currentUserId: vm.currentUserId ?? 0,
+        currentUserLocation: vm.userLocation,
+        isLoading: true, // <--- Memicu Shimmer Effect
+      );
     } else if (!vm.hasGroups) {
-      // 1. Belum ada Grup: Tampilkan panel untuk buat grup
+      // Jika loading selesai & tidak punya grup
       bottomPanelContent = const _CreateGroupPanel();
     } else if (vm.friends.isEmpty) {
-      bottomPanelContent =
-          const _EmptyFriendListPlaceholder(); // <--- BARIS KRITIS
+      // Punya grup tapi teman kosong
+      bottomPanelContent = const _EmptyFriendListPlaceholder();
     } else {
-      // 3. Grup ada dan Teman ada: Tampilkan daftar teman di panel
+      // Normal: Tampilkan list teman
       bottomPanelContent = _FriendListPanel(
         friends: vm.friends,
         currentUserId: vm.currentUserId ?? 0,
         currentUserLocation: vm.userLocation,
+        isLoading: false,
       );
     }
-// Akhir dari PERBAIKAN LOGIC UTAMA BOTTOM PANEL
+    // ---------------------------------------------
+
     return Scaffold(
-      resizeToAvoidBottomInset: false, // Pastikan ini tetap false
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           // 1. Map Layer
-          _buildMapLayer(context, vm, vm.friends),
+          _buildMapLayer(context, vm, vm.friends, sortedEvents),
 
           // 2. Search & Filter
           _buildSearchAndFilter(context, vm),
 
           // 3. Bottom Panel (Background Putih Melengkung)
-          if (vm.hasGroups && !vm.isLoading && !vm.isEventLoading)
+          if (showBottomPanel)
             Align(
               alignment: Alignment.bottomCenter,
-              // 🔥 TAMBAHAN: Bungkus dengan GestureDetector
               child: GestureDetector(
-                onTap: () {
-                  // 🔥 LOGIC: Hilangkan keyboard saat panel disentuh
-                  FocusScope.of(context).unfocus();
-                },
-                // Widget Panel Putih Asli
+                onTap: () => FocusScope.of(context).unfocus(),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeInOut,
-                  // Tinggi panel
-                  height: MediaQuery.of(context).size.height *
-                      (vm.events.isNotEmpty ? 0.40 : 0.40),
+                  // Tinggi panel (bisa disesuaikan logic-nya jika event ada/tidak)
+                  height: MediaQuery.of(context).size.height * 0.40,
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.only(
@@ -139,15 +168,16 @@ class _HomeViewState extends State<_HomeView> {
                     ],
                   ),
                   child: Padding(
-                    padding: EdgeInsets.only(
-                        top: vm.events.isNotEmpty ? 20.0 : 20.0),
+                    padding: const EdgeInsets.only(top: 20.0),
+                    // Menampilkan Shimmer atau Konten Asli
                     child: bottomPanelContent,
                   ),
                 ),
               ),
             ),
 
-          if (vm.hasGroups && sortedEvents.isNotEmpty)
+          // 4. Event Card (Hanya muncul jika TIDAK loading dan ADA event)
+          if (showEventCard) ...[
             Positioned(
               left: 0,
               right: 0,
@@ -156,7 +186,7 @@ class _HomeViewState extends State<_HomeView> {
                 height: 130,
                 child: PageView.builder(
                   controller: _pageController,
-                  itemCount: sortedEvents.length, // Pakai sortedEvents
+                  itemCount: sortedEvents.length,
                   onPageChanged: (index) {
                     setState(() => _currentIndex = index);
                     vm.setCurrentEvent(sortedEvents[index]);
@@ -166,7 +196,7 @@ class _HomeViewState extends State<_HomeView> {
                       padding: const EdgeInsets.symmetric(horizontal: 24),
                       child: _EventCard(
                         userLocation: vm.userLocation,
-                        event: sortedEvents[index], // Pakai sortedEvents
+                        event: sortedEvents[index],
                       ),
                     );
                   },
@@ -175,10 +205,7 @@ class _HomeViewState extends State<_HomeView> {
               ),
             ),
 
-          // Tombol Navigasi Kiri Kanan
-          // 🔥 FIX 2: Ganti 'vm.events.isNotEmpty' jadi 'sortedEvents.isNotEmpty'
-          if (vm.hasGroups && sortedEvents.isNotEmpty) ...[
-            // TOMBOL KIRI
+            // Tombol Navigasi Kiri
             Positioned(
               left: 10,
               bottom: (MediaQuery.of(context).size.height * 0.40) - 10,
@@ -189,15 +216,13 @@ class _HomeViewState extends State<_HomeView> {
               ),
             ),
 
-            // TOMBOL KANAN
+            // Tombol Navigasi Kanan
             Positioned(
               right: 10,
               bottom: (MediaQuery.of(context).size.height * 0.40) - 10,
               child: IconButton(
                 icon: const Icon(Icons.chevron_right,
                     color: Colors.white, size: 30),
-                // 🔥 FIX 3: Jangan pakai vm.events.length, nanti error index out of range!
-                // Pakai sortedEvents.length
                 onPressed: () => _goToNext(sortedEvents.length),
               ),
             ),
@@ -215,11 +240,11 @@ class _HomeViewState extends State<_HomeView> {
   }
 }
 
-// ... _buildMapLayer (Logic Tetap Sama) ...
 Widget _buildMapLayer(
   BuildContext context,
   HomeViewModel vm,
   List<Friend> friends,
+  List<Event> activeEvents, // <--- 1. TAMBAHKAN PARAMETER INI
 ) {
   return RepaintBoundary(
     child: FlutterMap(
@@ -232,6 +257,7 @@ Widget _buildMapLayer(
         ),
       ),
       children: [
+        // ... (TileLayer tetap sama, copy paste saja bagian TileLayer kamu) ...
         TileLayer(
           urlTemplate:
               'https://api.maptiler.com/maps/streets/{z}/{x}/{y}.jpg?key=nkV8u6JfP6d8DPcFsYJe',
@@ -246,23 +272,18 @@ Widget _buildMapLayer(
         /// MARKER LAYER
         Consumer<HomeViewModel>(
           builder: (context, vm, _) {
-            // 1. Marker Teman
+            // ... (Marker Teman & User & Search tetap sama) ...
             final friendMarkers = vm.friendsForMap
                 .where((f) => f.id != vm.currentUserId)
-                .map(
-                  (f) => Marker(
-                    point: LatLng(f.latitude!, f.longitude!),
-                    width: 120,
-                    height: 110,
-                    child: _FriendMapMarker(
-                      friend: f,
-                      currentEvent: vm.currentEvent,
-                    ),
-                  ),
-                )
+                .map((f) => Marker(
+                      point: LatLng(f.latitude!, f.longitude!),
+                      width: 120,
+                      height: 110,
+                      child: _FriendMapMarker(
+                          friend: f, currentEvent: vm.currentEvent),
+                    ))
                 .toList();
 
-            // 2. Marker User Sendiri
             final userMarker = Marker(
               point: vm.userLocation,
               width: 60,
@@ -271,7 +292,6 @@ Widget _buildMapLayer(
                   color: _kPrimaryColor, size: 50),
             );
 
-            // 3. Marker Pencarian
             final searchMarkerWidget = vm.searchMarker == null
                 ? <Marker>[]
                 : [
@@ -279,39 +299,50 @@ Widget _buildMapLayer(
                       point: vm.searchMarker!,
                       width: 60,
                       height: 60,
-                      child: const Icon(
-                        Icons.location_on,
-                        color: _kPrimaryColor,
-                        size: 45,
-                      ),
+                      child: const Icon(Icons.location_on,
+                          color: _kPrimaryColor, size: 45),
                     )
                   ];
 
-            // 🔥 4. SINGLE EVENT MARKER (HANYA YANG DIPILIH) 🔥
-            // Kita cek apakah ada event yang sedang dipilih (currentEvent)
-            final currentEvent = vm.currentEvent;
-
-            // List marker event (isinya maksimal cuma 1 atau kosong)
+            // 🔥 PERBAIKAN LOGIC EVENT MARKER 🔥
             final List<Marker> selectedEventMarkerList = [];
 
-            if (currentEvent != null) {
+            // A. Ambil calon event dari VM
+            Event? targetEvent = vm.currentEvent;
+            final now = DateTime.now();
+
+            // B. VALIDASI KETAT:
+            // Cek 1: Apakah event hangus?
+            // Cek 2: Apakah event ada di dalam list activeEvents (yg sudah difilter UI)?
+            bool isEventInvalid = targetEvent != null &&
+                ((targetEvent.endTime != null &&
+                        targetEvent.endTime!.isBefore(now)) ||
+                    !activeEvents.any((e) => e.id == targetEvent!.id));
+
+            // C. AUTO SYNC / FALLBACK:
+            // Jika vm.currentEvent kosong ATAU tidak valid (hangus),
+            // maka PAKSA map untuk menampilkan event PERTAMA dari list yang valid.
+            if (targetEvent == null || isEventInvalid) {
+              if (activeEvents.isNotEmpty) {
+                targetEvent =
+                    activeEvents.first; // Ambil event paling baru/valid
+              } else {
+                targetEvent = null;
+              }
+            }
+
+            // D. Render Marker jika targetEvent valid
+            if (targetEvent != null) {
               selectedEventMarkerList.add(
                 Marker(
-                  // Pastikan LatLng diambil dari event yang sedang dipilih
-                  point: LatLng(currentEvent.locationLatitude,
-                      currentEvent.locationLongitude),
-                  width: 80, // Sedikit lebih lebar agar teks muat
+                  point: LatLng(targetEvent.locationLatitude,
+                      targetEvent.locationLongitude),
+                  width: 80,
                   height: 80,
                   child: Column(
                     children: [
-                      // Icon Marker Biru Besar (agar terlihat fokus)
-                      const Icon(
-                        Icons.location_on,
-                        color: Colors.blue, // 🔵 Warna Biru Sesuai Request
-                        size:
-                            50, // Ukuran diperbesar sedikit biar jelas ini yg dipilih
-                      ),
-                      // Label Judul Event
+                      const Icon(Icons.location_on,
+                          color: Colors.blue, size: 50),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
@@ -325,9 +356,9 @@ Widget _buildMapLayer(
                                   offset: Offset(0, 2))
                             ]),
                         child: Text(
-                          currentEvent.title.length > 10
-                              ? "${currentEvent.title.substring(0, 8)}..."
-                              : currentEvent.title,
+                          targetEvent.title.length > 10
+                              ? "${targetEvent.title.substring(0, 8)}..."
+                              : targetEvent.title,
                           style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -346,7 +377,7 @@ Widget _buildMapLayer(
               markers: [
                 ...friendMarkers,
                 ...searchMarkerWidget,
-                ...selectedEventMarkerList, // 👈 Hanya memunculkan 1 marker event yang aktif
+                ...selectedEventMarkerList, // Marker yang sudah divalidasi
                 if (vm.isUserSharingLocation) userMarker,
               ],
             );
@@ -578,16 +609,19 @@ class _FriendListPanel extends StatelessWidget {
   final List<Friend> friends;
   final int currentUserId;
   final LatLng currentUserLocation;
+  final bool isLoading; // 🔥 1. Tambah parameter ini
 
   const _FriendListPanel({
     super.key,
     required this.friends,
     required this.currentUserId,
     required this.currentUserLocation,
+    this.isLoading = false, // Default false
   });
 
   @override
   Widget build(BuildContext context) {
+    // Filter logic tetap sama
     final filtered =
         friends.where((f) => f.id != currentUserId && f.isFriend).toList();
 
@@ -605,34 +639,89 @@ class _FriendListPanel extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 10), // Tambahkan sedikit jarak
+        const SizedBox(height: 10),
 
-        // 🔥 BAGIAN YANG DIUBAH MULAI DARI SINI
+        // 🔥 2. Logika Switching antara Shimmer dan Data Asli
         Expanded(
-          child: RefreshIndicator(
-            color: _kPrimaryColor, // Warna loading spinner
-            backgroundColor: Colors.white,
-            onRefresh: () async {
-              // Panggil fungsi refresh dari ViewModel
-              await context.read<HomeViewModel>().refreshData();
-            },
-            child: ListView.builder(
-              // Penting: Agar bisa ditarik walau item sedikit
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              itemCount: filtered.length,
-              itemBuilder: (context, index) {
-                final friend = filtered[index];
-                return _FriendListItem(
-                  friend: friend,
-                  currentUserLocation: currentUserLocation,
-                );
-              },
-            ),
+          child: isLoading
+              ? _buildShimmerList() // Tampilkan Shimmer jika loading
+              : filtered.isEmpty
+                  ? const Center(
+                      child: Text(
+                          "No active friends nearby")) // Handle empty state jika perlu
+                  : RefreshIndicator(
+                      color: _kPrimaryColor,
+                      backgroundColor: Colors.white,
+                      onRefresh: () async {
+                        await context.read<HomeViewModel>().refreshData();
+                      },
+                      child: ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final friend = filtered[index];
+                          return _FriendListItem(
+                            friend: friend,
+                            currentUserLocation: currentUserLocation,
+                          );
+                        },
+                      ),
+                    ),
+        ),
+      ],
+    );
+  }
+
+  // 🔥 3. Widget Shimmer Kustom
+  Widget _buildShimmerList() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[300]!,
+      highlightColor: Colors.grey[100]!,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+        physics:
+            const NeverScrollableScrollPhysics(), // Disable scroll saat loading
+        itemCount: 5, // Tampilkan 5 dummy item
+        itemBuilder: (_, __) => Padding(
+          padding: const EdgeInsets.only(bottom: 16.0),
+          child: Row(
+            children: [
+              // Dummy Avatar
+              const CircleAvatar(
+                radius: 24,
+                backgroundColor: Colors.white,
+              ),
+              const SizedBox(width: 16),
+              // Dummy Text Column
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      height: 16.0,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 100.0,
+                      height: 12.0,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            ],
           ),
         ),
-        // 🔥 AKHIR BAGIAN YANG DIUBAH
-      ],
+      ),
     );
   }
 }
@@ -1248,19 +1337,42 @@ class _GroupDropdownButton extends StatelessWidget {
         final groups = vm.groups;
         final hasGroups = vm.hasGroups;
 
+        // 🔥 Logic: Cek apakah "All Groups" dipilih (null)
+        final bool isAllGroupsSelected = vm.currentGroupId == null;
+
         return Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // --- OPSI ALL GROUPS ---
               ListTile(
-                leading: const Icon(Icons.list, color: _kPrimaryColor),
-                title: const Text('All Groups'),
+                leading: Icon(
+                  Icons.list,
+                  // Ubah warna jika dipilih
+                  color: isAllGroupsSelected ? _kPrimaryColor : Colors.grey,
+                ),
+                title: Text(
+                  'All Groups',
+                  style: TextStyle(
+                    // Ubah warna & tebal teks jika dipilih
+                    color:
+                        isAllGroupsSelected ? _kPrimaryColor : Colors.black87,
+                    fontWeight: isAllGroupsSelected
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                ),
+                // Tambah Centang di kanan jika dipilih
+                trailing: isAllGroupsSelected
+                    ? const Icon(Icons.check, color: _kPrimaryColor)
+                    : null,
                 onTap: () {
                   Navigator.pop(context);
                   vm.setCurrentGroup(null);
                 },
               ),
+
               if (!hasGroups)
                 const Padding(
                   padding: EdgeInsets.all(20),
@@ -1277,13 +1389,28 @@ class _GroupDropdownButton extends StatelessWidget {
                     itemCount: groups.length,
                     itemBuilder: (context, index) {
                       final group = groups[index];
+
+                      // 🔥 Logic: Cek apakah grup ini dipilih
+                      final bool isSelected = vm.currentGroupId == group.id;
+
                       return ListTile(
-                        leading: const Icon(Icons.group, color: _kPrimaryColor),
-                        title: Text(group.name),
+                        leading: Icon(Icons.group,
+                            color: isSelected ? _kPrimaryColor : Colors.grey),
+                        title: Text(
+                          group.name,
+                          style: TextStyle(
+                            color: isSelected ? _kPrimaryColor : Colors.black87,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                        // Tambah Centang di kanan jika dipilih
+                        trailing: isSelected
+                            ? const Icon(Icons.check, color: _kPrimaryColor)
+                            : null,
                         onTap: () async {
-                          // Tutup modal dulu
                           Navigator.pop(context);
-                          // Baru set grup (agar UI di belakang modal terlihat update)
                           await vm.setCurrentGroup(group.id);
                         },
                       );
@@ -1297,22 +1424,14 @@ class _GroupDropdownButton extends StatelessWidget {
                 title: const Text('Create New Group',
                     style: TextStyle(color: _kPrimaryColor)),
                 onTap: () {
-                  Navigator.pop(context); // 1. Tutup Modal
-
-                  // 2. Pindah ke Halaman Create Group
+                  Navigator.pop(context);
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const CreateGroupPage()),
                   ).then((_) {
-                    // 🔥 3. FIX: LOGIC SAAT KEMBALI (ON BACK)
-                    // Saat user kembali dari CreateGroupPage, data 'friends' mungkin rusak
-                    // karena tertimpa data global. Kita harus kembalikan ke konteks grup saat ini.
-
                     if (vm.currentGroupId != null) {
-                      // Jika user sedang membuka grup spesifik, ambil ulang data grup itu
                       vm.fetchFriendsByGroup(vm.currentGroupId!);
                     } else {
-                      // Jika user sedang di mode 'All Groups', ambil ulang data global + lokasi
                       vm.fetchFriends();
                     }
                   });

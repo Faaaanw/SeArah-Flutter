@@ -268,6 +268,31 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
+  // Di dalam HomeViewModel
+  Future<void> initializeHomeData() async {
+    // 1. Set loading TRUE agar UI menampilkan CircularProgressIndicator, bukan EmptyPlaceholder
+    _isLoading = true;
+    notifyListeners(); // Update UI ke Loading State
+
+    try {
+      // 2. Ambil Data Grup dulu
+      await fetchGroups();
+
+      // 3. Logika Default: Jika ada grup, ambil "All Friends" (null)
+      // Jika tidak ada grup, friends tetap kosong
+      if (_groups.isNotEmpty) {
+        await setCurrentGroup(
+            null); // Ini akan memanggil fetchFriends() untuk semua grup
+      }
+    } catch (e) {
+      print("Error initializing home: $e");
+    } finally {
+      // 4. Matikan Loading
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   // ====== Load Semua Data Awal ======
   Future<void> loadInitialData() async {
     await fetchFriendLocations(_authToken!);
