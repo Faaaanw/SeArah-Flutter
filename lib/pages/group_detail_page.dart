@@ -474,7 +474,6 @@ class _MemberSelectionDialogState extends State<_MemberSelectionDialog> {
                       final user = _candidates[index];
                       // Pastikan parsing data JSON sesuai (nama key dari Laravel)
                       final name = user['name'] ?? 'No Name';
-                      final email = user['email'] ?? '-';
                       final userId = user['id'];
 
                       return ListTile(
