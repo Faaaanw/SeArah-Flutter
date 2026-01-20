@@ -4,6 +4,9 @@ import 'package:provider/provider.dart';
 // import 'package:latlong2/latlong.dart';
 
 // Import Halaman Detail Group
+import 'package:searah_backend/pages/create_event_page.dart';
+import 'package:searah_backend/pages/create_group_page.dart';
+import 'package:searah_backend/pages/friends_page.dart';
 import 'package:searah_backend/pages/group_detail_page.dart';
 import 'package:searah_backend/pages/notification_page.dart';
 
@@ -18,8 +21,155 @@ const Color _primaryOrange = Color(0xFFFF6F4D);
 const Color _lightOrangeBg = Color(0xFFFFF0EB);
 const Color _textDark = Color(0xFF2D2D2D);
 const Color _textGrey = Color(0xFF888888);
+const Color _backgroundColor = Color(0xFFFFF4DE);
 const double _defaultPadding = 20.0;
 const double _cardRadius = 24.0;
+
+// Widget untuk menampilkan kata sambutan
+class _GreetingWidget extends StatelessWidget {
+  final String userName;
+
+  const _GreetingWidget({Key? key, required this.userName}) : super(key: key);
+
+  // Fungsi untuk mendapatkan sambutan berdasarkan waktu
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 11) {
+      return 'Pagi';
+    } else if (hour >= 11 && hour < 15) {
+      return 'Siang';
+    } else if (hour >= 15 && hour < 18) {
+      return 'Sore';
+    } else {
+      return 'Malam';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    // Ukuran font responsif, contoh: 5% dari lebar layar
+    final double responsiveFontSize = (screenWidth * 0.05).clamp(18.0, 24.0);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.only(
+          top: 8.0, bottom: 20.0), // Jarak dari atas dan ke header di bawahnya
+      alignment: Alignment.centerLeft,
+      child: Text(
+        'Selamat ${_getGreeting()},\n$userName!',
+        style: TextStyle(
+          // Untuk memakai font Poppins, tambahkan package google_fonts di pubspec.yaml
+          // lalu ubah TextStyle ini menjadi:
+          // GoogleFonts.poppins(
+          //   color: const Color(0xFF44264C),
+          //   fontSize: responsiveFontSize,
+          //   fontWeight: FontWeight.w700, // Bold
+          //   height: 1.3, // Jarak antar baris
+          // )
+          color: const Color(0xFF44264C),
+          fontSize: responsiveFontSize,
+          fontWeight: FontWeight.w700,
+          height: 1.3,
+        ),
+      ),
+    );
+  }
+}
+
+class _ResponsiveHeader extends StatelessWidget {
+  final HomeViewModel viewModel;
+  final void Function(BuildContext, HomeViewModel) onGroupPressed;
+
+  const _ResponsiveHeader({
+    Key? key,
+    required this.viewModel,
+    required this.onGroupPressed,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    const barHeight = 56.0;
+
+    return Container(
+      // The margin is applied here to the whole widget container
+      margin: const EdgeInsets.symmetric(horizontal: 0),
+      height: screenSize.height * 0.25,
+      child: Stack(
+        children: [
+          // Layer 1: Background Image
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24.0),
+              child: Image.asset(
+                'assets/images/container-image.png',
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+
+          // Layer 2: Floating Search Bar
+          Positioned(
+            bottom: 20.0,
+            left: 20.0,
+            right: 20.0,
+            child: Container(
+              height: barHeight,
+              padding: const EdgeInsets.only(left: 20, right: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.90),
+                borderRadius: BorderRadius.circular(barHeight / 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  // Search Icon
+                  const Icon(Icons.search, color: _textGrey),
+                  const SizedBox(width: 12),
+
+                  // Search TextField
+                  Expanded(
+                    child: TextField(
+                      style: const TextStyle(fontSize: 16),
+                      decoration: InputDecoration(
+                        hintText: "Search here...",
+                        hintStyle: TextStyle(color: Colors.grey.shade500),
+                        border: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Group Selector Button
+                  InkWell(
+                    onTap: () => onGroupPressed(context, viewModel),
+                    borderRadius: BorderRadius.circular(30),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: _primaryOrange,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.group,
+                          color: Colors.white, size: 20),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
@@ -33,12 +183,12 @@ class DashboardPage extends StatelessWidget {
             viewModel.events.isNotEmpty ? viewModel.events.first : null;
 
         return Scaffold(
-          backgroundColor: Colors.white,
+          backgroundColor: _backgroundColor,
           body: SafeArea(
             // ✅ FITUR 1: REFRESH INDICATOR
             child: RefreshIndicator(
               color: _primaryOrange,
-              backgroundColor: Colors.white,
+              backgroundColor: const Color.fromARGB(255, 255, 255, 255),
               onRefresh: () async {
                 // 1. Tangkap ID grup yang sedang aktif
                 final savedGroupId = viewModel.currentGroupId;
@@ -60,10 +210,14 @@ class DashboardPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(height: 16),
+                    // Menampilkan widget sambutan di sini
+                    _GreetingWidget(userName: "User"),
 
-                    // 1. HEADER: Search Bar + Group Selector
-                    _buildSearchHeader(context, viewModel),
+                    // 1. HEADER: Responsive Header
+                    _ResponsiveHeader(
+                      viewModel: viewModel,
+                      onGroupPressed: _showGroupModal,
+                    ),
 
                     // Indikator Loading Tipis (Non-blocking)
                     if (viewModel.isLoading)
@@ -75,6 +229,11 @@ class DashboardPage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
+
+                    const SizedBox(height: 24),
+
+                    // WIDGET BARU: KARTU AKSI
+                    _buildActionCards(context, viewModel),
 
                     const SizedBox(height: 24),
 
@@ -94,7 +253,7 @@ class DashboardPage extends StatelessWidget {
                     const SizedBox(height: 24),
 
                     // 3. STATUS LOKASI
-                    _buildLocationToggle(context,viewModel),
+                    _buildLocationToggle(context, viewModel),
 
                     const SizedBox(height: 24),
 
@@ -104,11 +263,6 @@ class DashboardPage extends StatelessWidget {
                     _buildFriendsList(viewModel, context),
 
                     const SizedBox(height: 24),
-
-                    // 5. GRID MENU
-                    _buildSectionTitle("Menu Cepat"),
-                    const SizedBox(height: 12),
-                    _buildQuickMenuGrid(context, viewModel),
 
                     // Spacer bawah agar scroll nyaman
                     const SizedBox(height: 100),
@@ -122,51 +276,116 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  // --- WIDGET BUILDERS ---
-
-  Widget _buildSearchHeader(BuildContext context, HomeViewModel viewModel) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.15),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: Colors.grey.shade100),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+  // ✅ WIDGET BARU: CARD UNTUK AKSI CEPAT
+  Widget _buildActionCards(BuildContext context, HomeViewModel viewModel) {
+    return SizedBox(
+      height: 100, // Beri tinggi eksplisit agar kartu gambar terlihat bagus
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const SizedBox(width: 12),
+          // Kartu 1: Buat Event (Struktur kustom dengan background image)
           Expanded(
-            child: Text(
-              viewModel.currentGroupId != null && viewModel.groups.isNotEmpty
-                  ? "Grup: ${viewModel.groups.firstWhere((g) => g.id == viewModel.currentGroupId, orElse: () => viewModel.groups.first).name}"
-                  : "Search Location",
-              style: TextStyle(
-                color: _textGrey.withOpacity(0.8),
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
+            child: InkWell(
+              onTap: () {
+                if (viewModel.currentGroupId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          'Pilih grup terlebih dahulu untuk membuat event.'),
+                      backgroundColor: Colors.orangeAccent,
+                    ),
+                  );
+                } else {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          CreateEventPage(groupId: viewModel.currentGroupId!),
+                    ),
+                  );
+                }
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  image: const DecorationImage(
+                    image: AssetImage(
+                        'assets/images/buat event.png'), // Ganti dengan aset baru
+                    fit: BoxFit.fill,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.2),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    )
+                  ],
+                ),
               ),
-              overflow: TextOverflow.ellipsis,
             ),
           ),
-          InkWell(
-            onTap: () => _showGroupModal(context, viewModel),
-            borderRadius: BorderRadius.circular(30),
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: const BoxDecoration(
-                color: _primaryOrange,
-                shape: BoxShape.circle,
+
+          // Kartu 2: Buat Grup (Struktur kustom dengan background image)
+          Expanded(
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => const CreateGroupPage()));
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  image: const DecorationImage(
+                    image: AssetImage('assets/images/card tambah grup.png'),
+                    fit: BoxFit.fill, // Penuhi seluruh area kartu
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.2),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    )
+                  ],
+                ),
               ),
-              child: const Icon(Icons.group, color: Colors.white, size: 20),
             ),
-          )
+          ),
+
+          // Kartu 3: Teman (Struktur kustom dengan background image)
+          Expanded(
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => const FriendsPage()));
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  image: const DecorationImage(
+                    image: AssetImage('assets/images/teman.png'),
+                    fit: BoxFit.fill,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.2),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    )
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -179,7 +398,7 @@ class DashboardPage extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      backgroundColor: Colors.white,
+      backgroundColor: const Color.fromARGB(255, 255, 255, 255),
       builder: (_) {
         final groups = vm.groups;
         return Padding(
@@ -427,7 +646,7 @@ class DashboardPage extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-          color: _lightOrangeBg,
+          color: const Color.fromARGB(255, 255, 255, 255),
           borderRadius: BorderRadius.circular(_cardRadius)),
       child: Column(children: [
         const Icon(Icons.event_busy, size: 40, color: _primaryOrange),
@@ -444,7 +663,7 @@ class DashboardPage extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color.fromARGB(255, 255, 255, 255),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.grey.shade200)),
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -491,7 +710,6 @@ class DashboardPage extends StatelessWidget {
   // --- LOGIC BARU: CEK GPS, PERMISSION, & AUTO-RETRY ---
   Future<void> _onLocationSwitchChanged(
       BuildContext context, HomeViewModel viewModel, bool value) async {
-    
     // 1. Jika user mau MEMATIKAN lokasi, langsung proses
     if (value == false) {
       viewModel.toggleLocationSharing(false);
@@ -513,23 +731,25 @@ class DashboardPage extends StatelessWidget {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text("Batal", style: TextStyle(color: Colors.grey)),
+                child:
+                    const Text("Batal", style: TextStyle(color: Colors.grey)),
               ),
               TextButton(
                 onPressed: () async {
                   Navigator.pop(ctx); // Tutup dialog dulu
-                  
+
                   // Buka settingan HP
                   await Geolocator.openLocationSettings();
-                  
+
                   // --- FIX UTAMA DISINI ---
                   // Beri jeda 1 detik agar HP sempat memproses nyala-nya GPS
                   await Future.delayed(const Duration(seconds: 1));
 
                   // Cek ulang secara otomatis setelah kembali dari setting
-                  if (await Geolocator.isLocationServiceEnabled() && context.mounted) {
-                     // Panggil fungsi ini lagi secara REKURSIF (Otomatis nyalakan switch)
-                     _onLocationSwitchChanged(context, viewModel, true);
+                  if (await Geolocator.isLocationServiceEnabled() &&
+                      context.mounted) {
+                    // Panggil fungsi ini lagi secara REKURSIF (Otomatis nyalakan switch)
+                    _onLocationSwitchChanged(context, viewModel, true);
                   }
                 },
                 child: const Text("Aktifkan",
@@ -584,9 +804,8 @@ class DashboardPage extends StatelessWidget {
       await viewModel.toggleLocationSharing(true);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-           const SnackBar(content: Text("Gagal mengaktifkan lokasi. Coba sesaat lagi."))
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Gagal mengaktifkan lokasi. Coba sesaat lagi.")));
       }
     }
   }
@@ -668,9 +887,7 @@ class DashboardPage extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isFriend
-            ? const Color(0xFFFFF0EB)
-            : Colors.grey.shade50, // Beda warna background
+        color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: isFriend
             ? null
@@ -680,7 +897,7 @@ class DashboardPage extends StatelessWidget {
       child: Row(children: [
         CircleAvatar(
             radius: 24,
-            backgroundColor: Colors.white,
+            backgroundColor: _backgroundColor,
             child: CircleAvatar(
                 radius: 22, backgroundImage: NetworkImage(avatarUrl))),
         const SizedBox(width: 12),
@@ -754,58 +971,6 @@ class DashboardPage extends StatelessWidget {
           ]
         ])
       ]),
-    );
-  }
-
-  Widget _buildQuickMenuGrid(BuildContext context, HomeViewModel viewModel) {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      childAspectRatio: 1.8,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      children: [
-        _buildMenuButton(context, Icons.group_add_outlined, "Buat Grup", () {
-          _showGroupModal(context, viewModel);
-        }),
-        _buildMenuButton(context, Icons.notifications_none, "Notifikasi", () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const NotificationPage(),
-            ),
-          );
-        }),
-        _buildMenuButton(context, Icons.settings_outlined, "Pengaturan", () {}),
-      ],
-    );
-  }
-
-  Widget _buildMenuButton(
-      BuildContext context, IconData icon, String label, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey.shade100),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.grey.withOpacity(0.05),
-                  blurRadius: 5,
-                  offset: const Offset(0, 2))
-            ]),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(icon, color: _primaryOrange, size: 28),
-          const SizedBox(height: 8),
-          Text(label,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w600, color: _textDark))
-        ]),
-      ),
     );
   }
 

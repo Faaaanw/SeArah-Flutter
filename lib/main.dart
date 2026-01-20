@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:searah_backend/viewmodel/home_viewmodel.dart';
 import 'package:searah_backend/viewmodel/friend_viewmodel.dart';
 import 'package:searah_backend/pages/splash_screen.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 // 🔥 1. GLOBAL NAVIGATOR KEY
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -80,7 +81,7 @@ void main() async {
   // -----------------------------------------------------------------------
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
     print('☀️ Foreground Message received: ${message.notification?.title}');
-    
+
     RemoteNotification? notification = message.notification;
     AndroidNotification? android = message.notification?.android;
 
@@ -122,13 +123,18 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ThemeData baseTheme = ThemeData(
+      primarySwatch: Colors.orange,
+      scaffoldBackgroundColor: const Color(0xFFFFF4DE),
+      useMaterial3: true,
+    );
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'SeArah',
       navigatorKey: navigatorKey,
-      theme: ThemeData(
-        primarySwatch: Colors.orange,
-        useMaterial3: true,
+      theme: baseTheme.copyWith(
+        textTheme: GoogleFonts.poppinsTextTheme(baseTheme.textTheme),
       ),
       home: const SplashScreen(),
     );

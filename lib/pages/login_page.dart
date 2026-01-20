@@ -330,7 +330,7 @@ class _LoginView extends StatelessWidget {
     return GestureDetector(
       onTap: () => _unfocus(context),
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: Color(0xFFFFF4DE),
         body: SafeArea(
           child: Stack(
             children: [

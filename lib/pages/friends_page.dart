@@ -27,7 +27,7 @@ class _FriendsPageState extends State<FriendsPage> {
   static const Color textDark = Color(0xFF2D3142);
   static const Color textLight = Color(0xFF9CA3AF);
 
-  static const String fontName = 'Poppins';
+
 
   @override
   void initState() {
@@ -79,8 +79,7 @@ class _FriendsPageState extends State<FriendsPage> {
             behavior: SnackBarBehavior.floating,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            content: const Text('Pengguna tidak ditemukan.',
-                style: TextStyle(fontFamily: fontName)),
+            content: const Text('Pengguna tidak ditemukan.'),
           ),
         );
       }
@@ -100,7 +99,6 @@ class _FriendsPageState extends State<FriendsPage> {
           const Text(
             'Friend Zone',
             style: TextStyle(
-              fontFamily: fontName,
               fontSize: 20,
               fontWeight: FontWeight.w700,
               color: textDark,
@@ -174,7 +172,6 @@ class _FriendsPageState extends State<FriendsPage> {
         labelColor: Colors.white,
         unselectedLabelColor: textLight,
         labelStyle: const TextStyle(
-          fontFamily: fontName,
           fontWeight: FontWeight.w600,
           fontSize: 14,
         ),
@@ -329,7 +326,6 @@ class _FriendsPageState extends State<FriendsPage> {
                   child: Text(
                     name.isNotEmpty ? name[0].toUpperCase() : '?',
                     style: TextStyle(
-                      fontFamily: fontName,
                       fontWeight: FontWeight.bold,
                       color: isDisabled ? Colors.grey : buttonColor,
                       fontSize: 18,
@@ -347,7 +343,6 @@ class _FriendsPageState extends State<FriendsPage> {
                     Text(
                       name,
                       style: const TextStyle(
-                        fontFamily: fontName,
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
                         color: textDark,
@@ -390,7 +385,6 @@ class _FriendsPageState extends State<FriendsPage> {
                           Text(
                             actionLabel,
                             style: TextStyle(
-                              fontFamily: fontName,
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
                               color: isDisabled ? Colors.grey : buttonColor,
@@ -456,7 +450,6 @@ class _FriendsPageState extends State<FriendsPage> {
           Text(
             title,
             style: const TextStyle(
-              fontFamily: fontName,
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: textDark,
@@ -504,11 +497,11 @@ class _FriendsPageState extends State<FriendsPage> {
             ),
             child: TextField(
               controller: friendIdController,
-              style: const TextStyle(fontFamily: fontName, color: textDark),
+              style: const TextStyle(color: textDark),
               decoration: InputDecoration(
                 hintText: "Ketik nama teman...",
                 hintStyle:
-                    const TextStyle(fontFamily: fontName, color: textLight),
+                    const TextStyle(color: textLight),
                 prefixIcon:
                     const Icon(Icons.search_rounded, color: primaryColor),
                 suffixIcon: Container(

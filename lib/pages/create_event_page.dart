@@ -128,9 +128,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Create New Event",
-            style: TextStyle(
-                fontWeight: FontWeight.bold, fontFamily: _kPoppinsFontFamily)),
+        title: const Text("Create New Event", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0.5,
         iconTheme: const IconThemeData(color: Colors.black87),

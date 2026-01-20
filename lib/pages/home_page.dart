@@ -1175,7 +1175,6 @@ class _LocationSharingButton extends StatelessWidget {
 
   // Warna tema (Diasumsikan _kPrimaryColor didefinisikan di tempat lain)
   static const Color _kPrimaryColor = Color(0xFFFA8B60);
-  static const String fontName = 'Poppins'; // Agar konsisten
 
   @override
   Widget build(BuildContext context) {
@@ -1204,7 +1203,6 @@ class _LocationSharingButton extends StatelessWidget {
               willBeSharing
                   ? 'Berbagi lokasi diaktifkan.'
                   : 'Berbagi lokasi dihentikan.',
-              style: const TextStyle(fontFamily: fontName),
             ),
             backgroundColor: willBeSharing ? Colors.green : Colors.red,
             duration: const Duration(seconds: 2),
